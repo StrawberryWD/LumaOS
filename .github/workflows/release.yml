@@ -1,0 +1,42 @@
+# 每天的 ISO + VMware 包放在 releases/dayNN/ 里提交到 main；这个工作流把还没有 Release 的 dayNN 目录
+# 自动发布成 GitHub Release（tag = dayNN，附件 = 该目录里的文件，说明 = 计划.md 里对应 Day 的那一行）。
+# 也可以在 Actions 页面手动运行（workflow_dispatch），把仓库里所有缺 Release 的天补发。
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: ['releases/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create a release for every releases/dayNN without one
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          for d in releases/day*/; do
+            tag=$(basename "$d")
+            if gh release view "$tag" >/dev/null 2>&1; then echo "$tag: release exists"; continue; fi
+            n=${tag#day}
+            note=$(grep -m1 "^| \*\*Day $n\*\*" 计划.md | sed 's/^| \*\*Day [0-9]*\*\* | //; s/ |$//' || true)
+            [ -n "$note" ] || note="LumaOS 5.0 Day $n"
+            printf '%s\n\n启动：VMware 固件选 BIOS；`lumaos-5.0.iso` 是 live CD（也能装到硬盘），`LumaOS-5-vmware.zip` 含 .vmx + .vmdk。\n' "$note" > /tmp/notes.md
+            gh release create "$tag" "$d"* --target "$GITHUB_SHA" --title "LumaOS 5.0 Day $n" --notes-file /tmp/notes.md
+          done
+
+  build-check:          # 从源码重新构建一次（尽力而为，失败不影响发布）
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y nasm gcc-multilib mtools dosfstools qemu-utils python3
+      - run: ./build.sh
+      - run: tools/build_user.sh user-out
