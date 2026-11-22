@@ -9,7 +9,8 @@
  *                 （main 不返回就直接 exit 也行）。
  *   luma_syscall  `int 0x80` 的内联封装（本文件里的 luma_syscall0..4）。ABI 见 kernel/syscall/syscall.h。
  *   libluma.c     C 库函数：putchar / fputc / puts / write / exit / strlen / strerror，以及全局 errno。
- *   Day 72+       printf、malloc/free、fopen/fread/fclose 会继续加在这个库里。
+ *   printf.c      DAY72：printf 家族（见下面声明）。
+ *   Day 73+       malloc/free、fopen/fread/fclose 会继续加在这个库里。
  *
  * 错误处理约定（和 C 标准库一致，和内核不同）：
  *   内核的系统调用直接返回 -LUMA_Exxx（见 errno.h）。库函数把它翻译成 C 习惯：失败返回 -1（或 EOF），
@@ -28,6 +29,11 @@
 /* ---- 基本类型（i386，ILP32）---- */
 typedef unsigned int   size_t;
 typedef int            ssize_t;
+typedef unsigned int   uintptr_t;
+typedef __builtin_va_list va_list;
+#define va_start(v, l) __builtin_va_start(v, l)
+#define va_end(v)      __builtin_va_end(v)
+#define va_arg(v, t)   __builtin_va_arg(v, t)
 #define NULL ((void *)0)
 #define EOF  (-1)
 
@@ -102,6 +108,19 @@ int     putchar(int c);                   /* 写一个字符到 stdout；成功�
 int     fputc(int c, int fd);             /* 同上，写到任意 fd（LumaOS 还没有 FILE*，Day 74 才有）*/
 int     puts(const char *s);              /* 写字符串和一个换行到 stdout；成功返回非负数，失败 EOF */
 int     fputs(const char *s, int fd);     /* 写字符串（不加换行）到 fd */
+/* DAY72: 格式化输出。支持：%d %i %u %x %X %o %c %s %p %%；标志 - + 空格 # 0；宽度和精度（含 *）；
+ * 长度修饰 hh h l ll z。不支持 %f/%e/%g（没有浮点）和 %n；遇到不认识的转换符原样输出（"%q" 输出 "%q"）。
+ * 返回值：printf/fprintf 返回写出的字符数（出错 -1 + errno）；snprintf 返回“如果缓冲区足够大本应写出的字符数”
+ * （与 C99 一致，所以可以用 snprintf(NULL,0,...) 先量长度）。%s 传 NULL 输出 "(null)"。 */
+int printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+int fprintf(int fd, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+int sprintf(char *buf, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+int snprintf(char *buf, size_t n, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+int vprintf(const char *fmt, va_list ap);
+int vfprintf(int fd, const char *fmt, va_list ap);
+int vsprintf(char *buf, const char *fmt, va_list ap);
+int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
+
 void    exit(int code) __attribute__((noreturn));      /* SYS_EXIT，永不返回 */
 
 int main(int argc, char **argv);          /* 用户程序提供 */

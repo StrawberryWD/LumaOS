@@ -3,8 +3,8 @@ build-chs/
 build-text/
 user-out/
 *.img
+*.iso
 *.vmdk
 *.o
+*.zip
 __pycache__/
-/*.iso
-/*.zip

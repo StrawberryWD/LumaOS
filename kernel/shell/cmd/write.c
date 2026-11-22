@@ -279,7 +279,6 @@ static char      (*wg_lines)[WRITE_MAX_LINE_LEN + 1];
 static const int  *wg_lens;
 static int         wg_n, wg_row, wg_col;
 static int         wg_confirm;      /* 1 = show the overwrite Y/N dialog */
-static int         wg_blink;
 
 /* Window sizes (PRE-4). Client area = window minus title bar and border. */
 #define WG_W   680
@@ -310,8 +309,7 @@ static void write_gui_draw(int cx, int cy, int cw, int ch)
                 vga_draw_char(cx + 32 + j * 8, y, wg_lines[i][j], COL_TEXT_PRIMARY);
         }
     }
-    wg_blink = (wg_blink + 1) % 30;
-    if (wg_blink < 20)
+    if (gui_blink_on())                     /* DAY72+: 按毫秒闪烁，不再按重绘次数 */
         vga_draw_rect(cx + 32 + wg_col * 8, cy + 3 + wg_row * 9, 2, 8, COL_LRED);
 
     vga_draw_hline(cx, cy + ch - 14, cw, COL_WIN_BORDER);

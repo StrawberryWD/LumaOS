@@ -521,6 +521,7 @@ cc_compile kernel/fs/fat/fat32_vfs.c    fat32_vfs
 # used between Day 10 and Day 13.
 cc_compile kernel/core/errno.c          errno           # DAY70
 cc_compile kernel/core/acpi.c           acpi            # DAY70+ ACPI poweroff
+cc_compile kernel/core/clock.c          clock           # DAY72+ ms time base
 cc_compile kernel/fs/fat/fat_cache.c    fat_cache       # DAY65
 cc_compile kernel/fs/vfs/vfs_ops.c      vfs_ops         # DAY64
 cc_compile kernel/fs/lmfs/lmfs.c        lmfs
@@ -640,7 +641,7 @@ $LD -m elf_i386 -Ttext "$KERNEL_BASE" -Tbss "$KERNEL_BSS" \
     "$BUILD/fat16_vfs.o" \
     "$BUILD/fat_vfs.o" \
     "$BUILD/fat32_vfs.o" \
-    "$BUILD/errno.o" "$BUILD/acpi.o" "$BUILD/fat_cache.o" "$BUILD/vfs_ops.o" \
+    "$BUILD/errno.o" "$BUILD/acpi.o" "$BUILD/clock.o" "$BUILD/fat_cache.o" "$BUILD/vfs_ops.o" \
     "$BUILD/lmfs.o" \
     "$BUILD/lmfs_vfs.o" \
     "$BUILD/window1.o" "$BUILD/window2.o" \

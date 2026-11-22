@@ -320,4 +320,7 @@ void gui_update_mouse(int mx, int my);
 int gui_clip(int *x, int *y, int *w, int *h,
              int cx, int cy, int cw, int ch);
 
+/* DAY72+: 光标闪烁相位（530 ms 翻转，见 window1.c） */
+int gui_blink_on(void);
+
 #endif /* LUMA_GUI_H */

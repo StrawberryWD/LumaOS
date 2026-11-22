@@ -134,6 +134,16 @@
 #include "../lib/string.h"
 
 /* ---- external drivers ---- */
+#include "../core/clock.h"
+
+/* DAY72+: 光标闪烁和帧率都按真实毫秒计（见 kernel/core/clock.h）。
+ * 光标：每 530 ms 翻转一次（Windows/多数终端的默认节奏）。gui_blink_on() 返回当前相位是否“亮”。
+ * 帧率：GUI_FRAME_MS = 16 ms（约 60 帧/秒）。鼠标/键盘每次循环都照常轮询（输入不延迟），但整屏重绘 +
+ * 提交给显卡最多每 16 ms 一次：鼠标快速滑动时多个位移合并成一帧，不再每个循环都重绘一遍整个桌面。 */
+#define GUI_BLINK_MS 530
+#define GUI_FRAME_MS 16
+int gui_blink_on(void) { return ((clock_ms() / GUI_BLINK_MS) & 1u) == 0; }
+
 extern int mouse_x, mouse_y, mouse_left_button, mouse_right_button;
 extern int mouse_consume_wheel(void);
 
@@ -1435,12 +1445,10 @@ void terminal_render(terminal_t *t, int wx, int wy, int ww, int wh)
                 vga_draw_char(cx + (k - from) * 8, dy, c, colr);
         }
         /* blinking cursor bar on the row it falls on */
-        if (lr == cur_row && t->cursor_blink < 15 && t->scroll_offset == 0)
+        if (lr == cur_row && gui_blink_on() && t->scroll_offset == 0)
             vga_draw_rect(cx + cur_col * 8, dy, 2, 8, COL_TERM_CUR);
         screen_row++;
     }
-
-    t->cursor_blink = (t->cursor_blink + 1) % 30;
 
     /* ---- scrollbar (over the whole virtual buffer incl. the live line) ---- */
     if (vrows > visible_rows) {
@@ -1853,6 +1861,7 @@ static void gui_poll_mouse(void)
 }
 
 /* ===== gui_refresh ===== */
+static int frame_mx = -1, frame_my = -1;      /* 上一帧画出的光标位置：光标移动本身也要重绘 */
 void gui_refresh(void)
 {
     unsigned char key = keyboard_read();
@@ -1869,12 +1878,19 @@ void gui_refresh(void)
 
     gui2_tick();
 
-    static int frame=0; frame++;
+    /* 重绘条件：有脏标记 / 模态窗口开着 / 光标闪烁相位变了 / 至少每 250 ms 一次（兜底）；
+     * 而且距上一帧至少 GUI_FRAME_MS（模态窗口、拖拽窗口也受这个上限约束）。 */
+    static uint32_t last_frame_ms = 0, last_phase = 0xFFFFFFFFu;
+    uint32_t now = clock_ms();
+    uint32_t phase = now / GUI_BLINK_MS;
     int dirty = g_terminal.redraw_needed;
     for (int i = 0; i < MAX_WINDOWS - GUI_EXTRA_FIRST; i++)   /* output of an extra terminal */
         if (win_alive[GUI_EXTRA_FIRST + i] && g_extra_term[i].redraw_needed) dirty = 1;
-    if (dirty || modal_on || (frame % 15 == 0)) {
+    if (phase != last_phase) dirty = 1;                       /* 光标亮/灭 */
+    if (now - last_frame_ms >= 250u) dirty = 1;
+    if ((dirty || modal_on || mx != frame_mx || my != frame_my) && now - last_frame_ms >= GUI_FRAME_MS) {
         gui_draw_frame(mx, my);
+        last_frame_ms = now; last_phase = phase; frame_mx = mx; frame_my = my;
     }
 }
 
@@ -1886,7 +1902,12 @@ void gui_modal_pump(void)
 {
     gui_poll_mouse();
     gui2_tick();
-    gui_draw_frame(mouse_x, mouse_y);
+    static uint32_t last_ms = 0;                 /* 模态（write 编辑器）循环同样限制在 ~60 帧/秒 */
+    uint32_t now = clock_ms();
+    if (now - last_ms >= GUI_FRAME_MS) {
+        gui_draw_frame(mouse_x, mouse_y);
+        last_ms = now;
+    }
 }
 
 /* ===== gui_handle_key ===== */
