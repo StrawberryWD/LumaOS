@@ -1,0 +1,12 @@
+Welcome to LumaOS 5.0 (live CD)
+
+You booted from the CD. There is no hard disk here: the system volume (RAM0)
+is an LMFS image that was copied from the CD into RAM, so you can create,
+write and delete files on it freely - everything is gone when you reboot.
+The CD itself (CD0, read only) holds the system resources.
+
+Try:   mounts            which volumes are mounted
+       cdinfo            boot medium and CD-ROM drives
+       ls                list this volume
+       read welcome.txt  show this text
+       run hello.sw      run an example program
