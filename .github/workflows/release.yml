@@ -24,11 +24,14 @@ jobs:
           shopt -s nullglob
           for d in releases/day*/; do
             tag=$(basename "$d")
-            if gh release view "$tag" >/dev/null 2>&1; then echo "$tag: release exists"; continue; fi
             n=${tag#day}
             note=$(grep -m1 "^| \*\*Day $n\*\*" 计划.md | sed 's/^| \*\*Day [0-9]*\*\* | //; s/ |$//' || true)
             [ -n "$note" ] || note="LumaOS 5.0 Day $n"
-            printf '%s\n\n启动：VMware 固件选 BIOS；`lumaos-5.0.iso` 是 live CD（也能装到硬盘），`LumaOS-5-vmware.zip` 含 .vmx + .vmdk。\n' "$note" > /tmp/notes.md
+            printf '%s\n\n启动：VMware 固件选 BIOS；`lumaos-5.0.iso` 是 live CD（从光盘直接运行，系统在内存里，目前还没有安装程序；安装器计划在 Day 85 之后）；`LumaOS-5-vmware.zip` 含 .vmx + .vmdk，其中 `LumaOS-hd.vmx` 是把预制好的硬盘镜像（vmdk）直接当硬盘启动，不是安装。\n' "$note" > /tmp/notes.md
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release edit "$tag" --notes-file /tmp/notes.md        # 已有：只刷新说明文字
+              continue
+            fi
             gh release create "$tag" "$d"* --target "$GITHUB_SHA" --title "LumaOS 5.0 Day $n" --notes-file /tmp/notes.md
           done
 
