@@ -42,6 +42,10 @@ int vfs_ops_stat(const char *path, uint32_t *size, int *is_dir);    /* 0 / -errn
 int vfs_ops_dir_count(const char *path, uint32_t *count);           /* 目录项数（不含 . ..） */
 int vfs_ops_statfs(const char *path, vfs_statfs_t *out);            /* 0 / -errno；path 只用来选卷（"IDE3" 即可） */
 
+/* DAY74: 按路径找到文件的 vfs_node（供“打开文件”用，不读内容）。成功 0 并填 *node；
+ * 不存在 -ENOENT，是目录 -EISDIR，卷不存在 -ENODEV。之后用 node->fs->open/read/close 随机读（file_t.pos 就是偏移）。 */
+int vfs_ops_open_node(const char *path, vfs_node_t *node);
+
 /* 把 "IDE3/docs/a" 拆成卷 + 卷内路径；找不到卷 -> -LUMA_ENODEV */
 int vfs_ops_split(const char *path, filesystem_t **fs, const char **sub);
 

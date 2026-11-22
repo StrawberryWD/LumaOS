@@ -522,6 +522,7 @@ cc_compile kernel/fs/fat/fat32_vfs.c    fat32_vfs
 cc_compile kernel/core/errno.c          errno           # DAY70
 cc_compile kernel/core/acpi.c           acpi            # DAY70+ ACPI poweroff
 cc_compile kernel/core/clock.c          clock           # DAY72+ ms time base
+cc_compile kernel/syscall/fd.c          fd              # DAY74 fd table
 cc_compile kernel/fs/fat/fat_cache.c    fat_cache       # DAY65
 cc_compile kernel/fs/vfs/vfs_ops.c      vfs_ops         # DAY64
 cc_compile kernel/fs/lmfs/lmfs.c        lmfs
@@ -641,7 +642,7 @@ $LD -m elf_i386 -Ttext "$KERNEL_BASE" -Tbss "$KERNEL_BSS" \
     "$BUILD/fat16_vfs.o" \
     "$BUILD/fat_vfs.o" \
     "$BUILD/fat32_vfs.o" \
-    "$BUILD/errno.o" "$BUILD/acpi.o" "$BUILD/clock.o" "$BUILD/fat_cache.o" "$BUILD/vfs_ops.o" \
+    "$BUILD/errno.o" "$BUILD/acpi.o" "$BUILD/clock.o" "$BUILD/fd.o" "$BUILD/fat_cache.o" "$BUILD/vfs_ops.o" \
     "$BUILD/lmfs.o" \
     "$BUILD/lmfs_vfs.o" \
     "$BUILD/window1.o" "$BUILD/window2.o" \
@@ -859,6 +860,7 @@ HELLO_EOF
                --build-id=none -s "$TMP/hello.o" -o "$TMP/hello.sw"; then
             cp "$TMP/hello.sw" "tests/hello.sw"
             mcopy -i "tests/fat12-with-file.img" "$TMP/hello.sw" ::HELLO.SW
+            mcopy -o -i "tests/fat12-with-file.img" "doc/fixture.txt" ::FIXTURE.TXT   # DAY74
             # DAY49: args.sw —— 打印 argc 与每个 argv[i]（用尖括号括起来，空参数/带空格的
             # 参数一眼可见），并检查 argv[argc] == NULL。同一套 gcc -m32 + ld 配方。
             cat > "$TMP/args.c" <<'ARGS_EOF'
@@ -1188,6 +1190,8 @@ gen_lmfs_fixture() {
     if [ -f "tests/err.sw" ]; then
         ADD+=(--add "tests/err.sw:err.sw")
     fi
+    # DAY74: 用户程序读文件的测试数据（fixture.txt 6120 字节 120 行；empty.txt 0 字节）。`run fileio.sw IDE3/fixture.txt`
+    ADD+=(--add "doc/fixture.txt:fixture.txt" --add "doc/empty.txt:empty.txt")
     # DAY45: data.sw —— 有 .rodata/.data/.bss、共 4 个 PT_LOAD 的真实 ELF，
     # 给 `elfmap IDE3/data.sw` 用（.bss 有 0x201c 字节要清零）。
     # 与 hello.sw 的区别：链接时不加 -z noseparate-code，于是 ld 把
@@ -1270,7 +1274,7 @@ echo "[img]  $IMG ($(stat -c%s "$IMG" 2>/dev/null || stat -f%z "$IMG") bytes)"
 # DAY62: the SYSTEM RESOURCE IMAGE. A real LMFS volume (tools/mkfs.lmfs, 2880 sectors) that the live CD copies
 # into RAM at boot and mounts as RAM0: a welcome text and the example programs.
 SYSLMFS="$BUILD/sys-lmfs.img"
-SYS_ADD=(--add "doc/welcome.txt:welcome.txt")
+SYS_ADD=(--add "doc/welcome.txt:welcome.txt" --add "doc/fixture.txt:fixture.txt" --add "doc/empty.txt:empty.txt")   # DAY74
 for f in hello.sw args.sw data.sw err.sw; do
     [ -f "tests/$f" ] && SYS_ADD+=(--add "tests/$f:$f")
 done
@@ -1289,6 +1293,7 @@ if [ "$KSZ" -gt 262144 ]; then die "kernel.bin ($KSZ bytes) is larger than the C
 python3 tools/mkiso.py -o "$ISO" --volume LUMAOS --boot "$BUILD/cdboot.bin" \
     --add "BOOT/KERNEL.BIN=$BUILD/kernel.bin" --add "BOOT/LMFS.IMG=$SYSLMFS" \
     --add "FONTS/SYS8X8.FNT=$BUILD/sys8x8.fnt" --add "ETC/LUMAOS.CFG=resources/LUMAOS.CFG" \
+    --add "ETC/FIXTURE.TXT=doc/fixture.txt" \
     --kernel-path BOOT/KERNEL.BIN --lmfs-path BOOT/LMFS.IMG || die "mkiso.py"
 echo "[iso]  $ISO ($(stat -c%s "$ISO") bytes) - boot with: qemu-system-i386 -cdrom $ISO -boot d"
 echo "=== Done ==="

@@ -15,6 +15,7 @@
 #include "../lib/string.h"
 #include "../mm/aspace.h"
 #include "../syscall/syscall.h"
+#include "../syscall/fd.h"
 #include "urt.h"
 
 /* DAY54: 程序在自己的地址空间里运行——
@@ -103,7 +104,9 @@ int elf_exec_args_hook(const char *path, terminal_t *out, int argc, const char *
     if (hook)
         hook(ctx, &img, res);
 
+    fd_reset();                                          /* DAY74: 每个程序一张干净的 fd 表 */
     rc = elf_run_args(&img, out, argc, argv, &res->code, &res->info);   /* Day 46/47/49 */
+    fd_reset();                                          /* 无论怎么结束，忘记关的文件在这里关掉 */
     aspace_deactivate();                                 /* 无论程序怎么结束，先回内核页目录 */
     aspace_destroy(&as);
     res->rc = rc;

@@ -146,9 +146,9 @@ static int top_grow(unsigned need)
 
 static void bad_pointer(const char *why)
 {
-    fputs("free(): ", STDERR_FILENO);
-    fputs(why, STDERR_FILENO);
-    fputs("\n", STDERR_FILENO);
+    dputs("free(): ", STDERR_FILENO);
+    dputs(why, STDERR_FILENO);
+    dputs("\n", STDERR_FILENO);
     exit(134);
 }
 

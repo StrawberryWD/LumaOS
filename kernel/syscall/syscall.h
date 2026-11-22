@@ -194,7 +194,26 @@
  *   程序退出时 aspace_destroy 回收所有页，所以堆不会泄漏给下一个程序。
  *   libluma 的 sbrk()/malloc() 建立在它上面（user/lib/malloc.c）。 */
 #define SYS_BRK      6
-#define LUMA_HEAP_MAX 0x00800000u    /* 每个程序的堆最大 8MB（也受页框池 8MB 总量限制）*/
+#define LUMA_HEAP_MAX 0x00800000u
+
+/* ===================================================================================
+ *  DAY74: 文件系统调用（fd 表见 fd.h）
+ * ===================================================================================
+ *   7  SYS_OPEN   int open(const char *path, int flags)             ebx=path, ecx=flags（今天只有 O_RDONLY=0）
+ *                 成功返回 fd（>= 3）。-ENOENT 不存在/空路径，-EISDIR 是目录，-EMFILE 表满，-ENAMETOOLONG 路径 >= 160，
+ *                 -EFAULT 路径指针坏，-ENODEV 卷不存在，-ENOSYS 想写/创建。
+ *   8  SYS_READ   ssize_t read(int fd, void *buf, size_t len)       ebx=fd, ecx=buf, edx=len
+ *                 返回读到的字节数；0 = 文件尾；一次最多 65536 字节（短读）。fd 不对（含 0/1/2）-EBADF；buf 不是整块
+ *                 可写的用户内存 -EFAULT（此时不读、不移动位置）；底层读盘失败 -EIO。
+ *   9  SYS_CLOSE  int close(int fd)                                 成功 0；fd 不对（含 0/1/2、重复 close）-EBADF
+ *  10  SYS_LSEEK  off_t lseek(int fd, int off, int whence)          返回新的偏移；whence = SEEK_SET 0 / CUR 1 / END 2；
+ *                 结果 < 0 或 > 2GB-1 -> -EINVAL，非法 whence -EINVAL；越过文件尾合法（之后 read 返回 0）。
+ *   为什么不是 5：5 一直留作“未分配调用号”（Day 50 的测试靠它验证 -ENOSYS）。
+ *   程序结束时内核关闭它忘记关的所有文件。 */
+#define SYS_OPEN     7
+#define SYS_READ     8
+#define SYS_CLOSE    9
+#define SYS_LSEEK   10    /* 每个程序的堆最大 8MB（也受页框池 8MB 总量限制）*/
 
 /* ---- 程序一侧的调用封装（内核自测、测试程序都用它）----
  * 程序是 -fno-pic 的静态可执行文件，ebx 可以直接做输入约束。 */

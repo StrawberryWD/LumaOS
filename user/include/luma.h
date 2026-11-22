@@ -44,6 +44,10 @@ typedef __builtin_va_list va_list;
 #define SYS_GETABI    3
 #define SYS_STRERROR  4
 #define SYS_BRK       6          /* DAY73 */
+#define SYS_OPEN      7          /* DAY74 */
+#define SYS_READ      8
+#define SYS_CLOSE     9
+#define SYS_LSEEK    10
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -133,23 +137,75 @@ void  malloc_info(malloc_info_t *mi);
 int   malloc_check(void);
 const char *strerror(int errnum);         /* 错误号 -> 英文描述；返回的缓冲区属于库（非线程安全，今天只有一个线程） */
 
+typedef struct luma_file FILE;            /* DAY74：见下面“文件与 <stdio.h>” */
 ssize_t write(int fd, const void *buf, size_t len);   /* 一次最多写 4096 字节（短写），失败 -1 + errno */
 int     putchar(int c);                   /* 写一个字符到 stdout；成功返回该字符（按 unsigned char），失败 EOF + errno */
-int     fputc(int c, int fd);             /* 同上，写到任意 fd（LumaOS 还没有 FILE*，Day 74 才有）*/
+int     dputc(int c, int fd);             /* 同上，写到任意 fd（DAY74：FILE* 版的 fputc 在下面；这是按 fd 写的底层版本）*/
 int     puts(const char *s);              /* 写字符串和一个换行到 stdout；成功返回非负数，失败 EOF */
-int     fputs(const char *s, int fd);     /* 写字符串（不加换行）到 fd */
+int     dputs(const char *s, int fd);     /* 写字符串（不加换行）到 fd */
 /* DAY72: 格式化输出。支持：%d %i %u %x %X %o %c %s %p %%；标志 - + 空格 # 0；宽度和精度（含 *）；
  * 长度修饰 hh h l ll z。不支持 %f/%e/%g（没有浮点）和 %n；遇到不认识的转换符原样输出（"%q" 输出 "%q"）。
  * 返回值：printf/fprintf 返回写出的字符数（出错 -1 + errno）；snprintf 返回“如果缓冲区足够大本应写出的字符数”
  * （与 C99 一致，所以可以用 snprintf(NULL,0,...) 先量长度）。%s 传 NULL 输出 "(null)"。 */
 int printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-int fprintf(int fd, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+int dprintf(int fd, const char *fmt, ...) __attribute__((format(printf, 2, 3)));   /* POSIX：写到 fd */
+int fprintf(FILE *f, const char *fmt, ...) __attribute__((format(printf, 2, 3)));  /* DAY74：写到 FILE*（stdout/stderr）*/
 int sprintf(char *buf, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 int snprintf(char *buf, size_t n, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 int vprintf(const char *fmt, va_list ap);
-int vfprintf(int fd, const char *fmt, va_list ap);
+int vdprintf(int fd, const char *fmt, va_list ap);
+int vfprintf(FILE *f, const char *fmt, va_list ap);
 int vsprintf(char *buf, const char *fmt, va_list ap);
 int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
+
+/* ===================================================================================
+ * DAY74: 文件与 <stdio.h>（user/lib/stdio.c）。内核一侧见 kernel/syscall/fd.h。
+ * ===================================================================================
+ *  底层（POSIX 风格，直接对应系统调用）：
+ *    open(path, O_RDONLY)  -> fd（>= 3）或 -1 + errno；今天只能只读
+ *    read(fd, buf, n)      -> 读到的字节数，0 = 文件尾，-1 + errno；一次最多 64KB（短读）
+ *    close(fd)             -> 0 / -1
+ *    lseek(fd, off, whence)-> 新偏移 / -1（SEEK_SET/CUR/END；越过文件尾合法）
+ *  C 标准的流 FILE*：
+ *    fopen(path, "r"|"rb"|"rt") -> FILE* 或 NULL + errno；其它模式（"w" "a" "+"）-> NULL + ENOSYS（写文件还没有）
+ *    fclose(f)             -> 0 / EOF；之后 f 不能再用。程序忘记 fclose，内核在程序结束时替它关 fd，但 FILE 的内存随进程消失
+ *    fread(p, size, n, f)  -> 完整读到的“项”数（可能 < n：到文件尾或出错，用 feof/ferror 区分）
+ *    fgetc/getc, ungetc(c, f)（只保证回退 1 个字符）, fgets(s, n, f)（读到换行或 n-1 个字符；什么都没读到返回 NULL）
+ *    fseek/ftell/rewind    -> 按“逻辑位置”（用户已经读到哪）工作，缓冲区里预读的部分会被正确扣掉
+ *    feof/ferror/clearerr/fileno/fflush(只读流上什么也不做，返回 0)
+ *    stdin/stdout/stderr   -> fd 0/1/2 的 FILE*；stdin 今天没有数据（读它 -> EOF + ferror）；stdout/stderr 不缓冲
+ *    fputc/fputs/fwrite/fprintf/vfprintf 可写到 stdout/stderr；对只读的文件流 -> EOF/0 + EBADF
+ *    perror(s)             -> 往 stderr 写 "s: <strerror(errno)>\n"
+ *  FILE 带 512 字节的读缓冲（和 malloc 一起一次分配），读一个字符不再是一次系统调用。 */
+#define O_RDONLY  0
+#define SEEK_SET  0
+#define SEEK_CUR  1
+#define SEEK_END  2
+extern FILE *stdin, *stdout, *stderr;
+int     open(const char *path, int flags);
+ssize_t read(int fd, void *buf, size_t len);
+int     close(int fd);
+int     lseek(int fd, int off, int whence);
+FILE   *fopen(const char *path, const char *mode);
+int     fclose(FILE *f);
+size_t  fread(void *p, size_t size, size_t n, FILE *f);
+size_t  fwrite(const void *p, size_t size, size_t n, FILE *f);
+int     fgetc(FILE *f);
+int     getc(FILE *f);
+int     getchar(void);
+int     ungetc(int c, FILE *f);
+char   *fgets(char *s, int n, FILE *f);
+int     fputc(int c, FILE *f);
+int     fputs(const char *s, FILE *f);
+int     fseek(FILE *f, long off, int whence);
+long    ftell(FILE *f);
+void    rewind(FILE *f);
+int     feof(FILE *f);
+int     ferror(FILE *f);
+void    clearerr(FILE *f);
+int     fileno(FILE *f);
+int     fflush(FILE *f);
+void    perror(const char *s);
 
 void    exit(int code) __attribute__((noreturn));      /* SYS_EXIT，永不返回 */
 

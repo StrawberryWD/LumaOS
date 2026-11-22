@@ -10,9 +10,9 @@ static int bad;
 static void check(const char *what, int ok)
 {
     if (!ok) {
-        fputs("FAIL: ", STDERR_FILENO);
-        fputs(what, STDERR_FILENO);
-        fputc('\n', STDERR_FILENO);
+        dputs("FAIL: ", STDERR_FILENO);
+        dputs(what, STDERR_FILENO);
+        dputc('\n', STDERR_FILENO);
         bad++;
     }
 }
@@ -40,12 +40,12 @@ int main(int argc, char **argv)
     check("puts empty string", puts("") >= 0);
 
     /* 5. fputc 到 stderr（红色）*/
-    check("fputc to stderr", fputc('E', STDERR_FILENO) == 'E');
-    fputc('\n', STDERR_FILENO);
+    check("fputc to stderr", dputc('E', STDERR_FILENO) == 'E');
+    dputc('\n', STDERR_FILENO);
 
     /* 6. 失败路径：写到不存在的 fd -> EOF 并设置 errno = EBADF，strerror 给出文字 */
     errno = 0;
-    check("fputc to fd 9 fails with EOF", fputc('x', 9) == EOF);
+    check("fputc to fd 9 fails with EOF", dputc('x', 9) == EOF);
     check("errno == EBADF", errno == EBADF);
     puts(strerror(errno));
     check("puts of long text (> 4096 bytes is split by write_all)", 1);
@@ -54,9 +54,9 @@ int main(int argc, char **argv)
 
     /* 7. 参数传递：argv 仍然正确（crt0 把内核的 argc/argv 原样交给 main）*/
     if (argc > 1) {
-        fputs("args:", STDOUT_FILENO);
+        dputs("args:", STDOUT_FILENO);
         for (int i = 1; i < argc; i++) {
-            putchar(' '); putchar('<'); fputs(argv[i], STDOUT_FILENO); putchar('>');
+            putchar(' '); putchar('<'); dputs(argv[i], STDOUT_FILENO); putchar('>');
         }
         putchar('\n');
     }
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
     /* 8. 速度：2000 次 putchar（每次一个系统调用），只输出一个点，防止刷屏 */
     int ok = 1;
     for (int i = 0; i < 2000; i++)
-        ok &= (fputc('.', 9) == EOF);              /* 失败路径也要走 2000 次系统调用而不出事 */
+        ok &= (dputc('.', 9) == EOF);              /* 失败路径也要走 2000 次系统调用而不出事 */
     check("2000 failing syscalls", ok);
     putchar('.'); putchar('\n');
 

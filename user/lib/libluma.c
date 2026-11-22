@@ -18,13 +18,19 @@ static int ret_errno(int r)
 }
 
 
+/* DAY74: 文件系统调用的 C 封装（内核一侧见 kernel/syscall/fd.h） */
+int open(const char *path, int flags)             { return ret_errno(luma_syscall3(SYS_OPEN, (int)path, flags, 0)); }
+ssize_t read(int fd, void *buf, size_t len)       { return ret_errno(luma_syscall3(SYS_READ, fd, (int)buf, (int)len)); }
+int close(int fd)                                 { return ret_errno(luma_syscall3(SYS_CLOSE, fd, 0, 0)); }
+int lseek(int fd, int off, int whence)            { return ret_errno(luma_syscall3(SYS_LSEEK, fd, off, whence)); }
+
 ssize_t write(int fd, const void *buf, size_t len)
 {
     return ret_errno(luma_syscall3(SYS_WRITE, fd, (int)buf, (int)len));
 }
 
 /* 内核一次最多写 4096 字节并返回实际字节数（短写）；这里的辅助函数循环到写完或出错 */
-static int write_all(int fd, const char *s, size_t n)
+int write_all(int fd, const char *s, size_t n)
 {
     while (n) {
         int w = (int)write(fd, s, n);
@@ -40,7 +46,7 @@ static int write_all(int fd, const char *s, size_t n)
     return 0;
 }
 
-int fputc(int c, int fd)
+int dputc(int c, int fd)
 {
     unsigned char ch = (unsigned char)c;        /* C 标准：按 unsigned char 写出，返回值也是它 */
     if (write_all(fd, (const char *)&ch, 1) < 0)
@@ -50,10 +56,10 @@ int fputc(int c, int fd)
 
 int putchar(int c)
 {
-    return fputc(c, STDOUT_FILENO);
+    return dputc(c, STDOUT_FILENO);
 }
 
-int fputs(const char *s, int fd)
+int dputs(const char *s, int fd)
 {
     if (write_all(fd, s, strlen(s)) < 0)
         return EOF;
@@ -62,7 +68,7 @@ int fputs(const char *s, int fd)
 
 int puts(const char *s)
 {
-    if (fputs(s, STDOUT_FILENO) == EOF)
+    if (dputs(s, STDOUT_FILENO) == EOF)
         return EOF;
     if (putchar('\n') == EOF)
         return EOF;

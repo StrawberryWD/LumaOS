@@ -16,7 +16,7 @@ static int bad;
 
 #define T(expect, ...) do { char b_[96]; int n_ = snprintf(b_, sizeof b_, __VA_ARGS__); \
     if (strcmp_(b_, expect) || n_ != (int)strlen(expect)) { \
-        fprintf(STDERR_FILENO, "FAIL line %d: want [%s] got [%s] (n=%d)\n", __LINE__, expect, b_, n_); bad++; } } while (0)
+        dprintf(STDERR_FILENO, "FAIL line %d: want [%s] got [%s] (n=%d)\n", __LINE__, expect, b_, n_); bad++; } } while (0)
 
 static int strcmp_(const char *a, const char *b)
 {
@@ -66,14 +66,14 @@ int main(int argc, char **argv)
     {
         char b[8];
         int n = snprintf(b, sizeof b, "%s", "0123456789");
-        if (n != 10 || strcmp_(b, "0123456")) { fprintf(STDERR_FILENO, "FAIL trunc [%s] n=%d\n", b, n); bad++; }
+        if (n != 10 || strcmp_(b, "0123456")) { dprintf(STDERR_FILENO, "FAIL trunc [%s] n=%d\n", b, n); bad++; }
         n = snprintf(b, 1, "%d", 12345);
-        if (n != 5 || b[0] != 0) { fprintf(STDERR_FILENO, "FAIL n=1\n"); bad++; }
+        if (n != 5 || b[0] != 0) { dprintf(STDERR_FILENO, "FAIL n=1\n"); bad++; }
         n = snprintf(NULL, 0, "%d-%s", 12345, "ab");
-        if (n != 8) { fprintf(STDERR_FILENO, "FAIL measure n=%d\n", n); bad++; }
+        if (n != 8) { dprintf(STDERR_FILENO, "FAIL measure n=%d\n", n); bad++; }
         char big[300]; char *w = big; int len = 0;
         for (int i = 0; i < 25; i++) len += sprintf(w + len, "%03d,", i);
-        if (len != 100 || strcmp_(big + 96, "024,")) { fprintf(STDERR_FILENO, "FAIL sprintf chain len=%d\n", len); bad++; }
+        if (len != 100 || strcmp_(big + 96, "024,")) { dprintf(STDERR_FILENO, "FAIL sprintf chain len=%d\n", len); bad++; }
     }
 
     /* 人看的输出（测试脚本按行匹配）。printf 一次最多没有长度限制：下面这行 > 128 字节，要跨缓冲区 */
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     printf("long: ");
     for (int i = 0; i < 20; i++) printf("%s%d", i ? "," : "", i * 1111);
     printf(" end\n");
-    fprintf(STDERR_FILENO, "stderr: %s %d\n", "red text", 2);
+    dprintf(STDERR_FILENO, "stderr: %s %d\n", "red text", 2);
     if (argc > 1) {
         printf("args(%d):", argc - 1);
         for (int i = 1; i < argc; i++) printf(" <%s>", argv[i]);

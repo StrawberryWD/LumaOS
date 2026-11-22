@@ -4,7 +4,7 @@
 #include "../include/luma.h"
 
 static int bad;
-#define CHECK(c) do { if (!(c)) { fprintf(STDERR_FILENO, "FAIL line %d: %s\n", __LINE__, #c); bad++; } } while (0)
+#define CHECK(c) do { if (!(c)) { dprintf(STDERR_FILENO, "FAIL line %d: %s\n", __LINE__, #c); bad++; } } while (0)
 #define HEAPOK() CHECK(malloc_check() == 0)
 
 static unsigned rng = 12345;

@@ -204,7 +204,7 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap)
     return (int)s.total;
 }
 
-int vfprintf(int fd, const char *fmt, va_list ap)
+int vdprintf(int fd, const char *fmt, va_list ap)
 {
     char buf[128];
     sink_t s = { put_fd, buf, sizeof(buf), 0, fd, 0, 0 };
@@ -213,13 +213,13 @@ int vfprintf(int fd, const char *fmt, va_list ap)
     return s.err ? -1 : (int)s.total;           /* write 失败时 errno 已由 write() 设置 */
 }
 
-int vprintf(const char *fmt, va_list ap) { return vfprintf(STDOUT_FILENO, fmt, ap); }
+int vprintf(const char *fmt, va_list ap) { return vdprintf(STDOUT_FILENO, fmt, ap); }
 int vsprintf(char *buf, const char *fmt, va_list ap) { return vsnprintf(buf, (size_t)-1 >> 1, fmt, ap); }
 
 int printf(const char *fmt, ...)
-{ va_list ap; va_start(ap, fmt); int r = vfprintf(STDOUT_FILENO, fmt, ap); va_end(ap); return r; }
-int fprintf(int fd, const char *fmt, ...)
-{ va_list ap; va_start(ap, fmt); int r = vfprintf(fd, fmt, ap); va_end(ap); return r; }
+{ va_list ap; va_start(ap, fmt); int r = vdprintf(STDOUT_FILENO, fmt, ap); va_end(ap); return r; }
+int dprintf(int fd, const char *fmt, ...)
+{ va_list ap; va_start(ap, fmt); int r = vdprintf(fd, fmt, ap); va_end(ap); return r; }
 int sprintf(char *buf, const char *fmt, ...)
 { va_list ap; va_start(ap, fmt); int r = vsprintf(buf, fmt, ap); va_end(ap); return r; }
 int snprintf(char *buf, size_t n, const char *fmt, ...)

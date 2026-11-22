@@ -10,6 +10,7 @@
 #define LUMA_KERNEL_SIDE 1
 #include "syscall.h"
 #include "../mm/aspace.h"
+#include "fd.h"
 #include "../arch/isr_context.h"
 #include "../mm/paging.h"
 
@@ -154,6 +155,18 @@ static int32_t sys_brk(uint32_t addr, uint32_t a2, uint32_t a3, uint32_t a4, uin
     return (int32_t)addr;
 }
 
+/* DAY74: 文件相关调用（实现在 fd.c） */
+static int32_t sys_open(uint32_t path, uint32_t flags, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a3; (void)a4; (void)a5; (void)a6;
+  if (!elf_running) return -LUMA_ESRCH;
+  return fd_open((const char *)(uintptr_t)path, flags); }
+static int32_t sys_read(uint32_t fd, uint32_t buf, uint32_t len, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a4; (void)a5; (void)a6; return fd_read((int32_t)fd, buf, len); }
+static int32_t sys_close(uint32_t fd, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fd_close((int32_t)fd); }
+static int32_t sys_lseek(uint32_t fd, uint32_t off, uint32_t whence, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a4; (void)a5; (void)a6; return fd_lseek((int32_t)fd, (int32_t)off, whence); }
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -163,6 +176,10 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_GETABI] = sys_getabi,
     [SYS_STRERROR] = sys_strerror,  /* DAY70 */
     [SYS_BRK]    = sys_brk,         /* DAY73 */
+    [SYS_OPEN]   = sys_open,        /* DAY74 */
+    [SYS_READ]   = sys_read,
+    [SYS_CLOSE]  = sys_close,
+    [SYS_LSEEK]  = sys_lseek,
 };
 
 static syscall_stats_t g_stats;
