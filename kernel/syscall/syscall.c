@@ -9,6 +9,7 @@
 #define LUMA_KERNEL_SIDE 1
 #define LUMA_KERNEL_SIDE 1
 #include "syscall.h"
+#include "../mm/aspace.h"
 #include "../arch/isr_context.h"
 #include "../mm/paging.h"
 
@@ -135,6 +136,24 @@ static int32_t sys_strerror(uint32_t errnum, uint32_t buf, uint32_t len, uint32_
     return copy < n ? -LUMA_ERANGE : (int32_t)n;
 }
 
+/* DAY73: SYS_BRK(addr) —— 见 syscall.h */
+static int32_t sys_brk(uint32_t addr, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{
+    (void)a2; (void)a3; (void)a4; (void)a5; (void)a6;
+    aspace_t *as = aspace_current();
+    if (!elf_running || !as)
+        return -LUMA_ESRCH;
+    if (!as->heap_hi)
+        return -LUMA_ENOMEM;
+    if (addr == 0)
+        return (int32_t)as->heap_brk;
+    if (addr < as->heap_lo)
+        return -LUMA_EINVAL;
+    if (aspace_brk(as, addr) != 0)
+        return -LUMA_ENOMEM;
+    return (int32_t)addr;
+}
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -143,6 +162,7 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_WRITE]  = sys_write,       /* DAY51 */
     [SYS_GETABI] = sys_getabi,
     [SYS_STRERROR] = sys_strerror,  /* DAY70 */
+    [SYS_BRK]    = sys_brk,         /* DAY73 */
 };
 
 static syscall_stats_t g_stats;

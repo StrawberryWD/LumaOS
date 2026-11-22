@@ -8,6 +8,7 @@ static uint32_t *pd_ptr(const aspace_t *as) { return (uint32_t *)(uintptr_t)as->
 int aspace_create(aspace_t *as)
 {
     as->pd_phys = 0; as->frames = 0; as->data_pages = 0;
+    as->heap_lo = as->heap_brk = as->heap_hi = 0;
     uint32_t pd = pmm_alloc();
     if (!pd)
         return -1;
@@ -76,8 +77,59 @@ int aspace_translate(const aspace_t *as, uint32_t va, uint32_t *pa)
     return paging_translate_pd(pd_ptr(as), va, pa, (uint32_t *)0);
 }
 
-void aspace_activate(const aspace_t *as)   { paging_load_cr3(as->pd_phys); }
-void aspace_deactivate(void)               { paging_load_cr3(paging_kernel_pd_phys()); }
+static aspace_t *g_current;                    /* DAY73 */
+void aspace_activate(const aspace_t *as)   { g_current = (aspace_t *)as; paging_load_cr3(as->pd_phys); }
+void aspace_deactivate(void)               { g_current = 0; paging_load_cr3(paging_kernel_pd_phys()); }
+aspace_t *aspace_current(void)             { return g_current; }
+
+/* ---- DAY73: 堆 ---- */
+void aspace_set_heap(aspace_t *as, uint32_t lo, uint32_t hi)
+{
+    if ((lo & 0xFFFu) || (hi & 0xFFFu) || lo < ASPACE_USER_LO || hi > ASPACE_USER_HI || lo > hi) {
+        as->heap_lo = as->heap_brk = as->heap_hi = 0;
+        return;
+    }
+    as->heap_lo = as->heap_brk = lo;
+    as->heap_hi = hi;
+}
+
+static uint32_t page_up(uint32_t v) { return (v + 0xFFFu) & ~0xFFFu; }
+
+static void unmap_page(aspace_t *as, uint32_t va)
+{
+    uint32_t *pd = pd_ptr(as);
+    if (!(pd[va >> 22] & PTE_P))
+        return;
+    uint32_t *pt = (uint32_t *)(uintptr_t)(pd[va >> 22] & 0xFFFFF000u);
+    uint32_t i = (va >> 12) & 0x3FF;
+    if (!(pt[i] & PTE_P))
+        return;
+    pmm_free(pt[i] & 0xFFFFF000u);
+    pt[i] = 0;
+    as->frames--; as->data_pages--;
+    if (g_current == as)
+        __asm__ volatile ("invlpg (%0)" : : "r"(va) : "memory");   /* 让 CPU 忘掉这页的旧翻译 */
+}
+
+int aspace_brk(aspace_t *as, uint32_t new_brk)
+{
+    if (!as->pd_phys || !as->heap_hi || new_brk < as->heap_lo || new_brk > as->heap_hi)
+        return -1;
+    uint32_t old_top = page_up(as->heap_brk), new_top = page_up(new_brk);
+    if (new_top > old_top) {
+        for (uint32_t va = old_top; va < new_top; va += 4096u)
+            if (map_page(as, va) != 0) {
+                for (uint32_t u = old_top; u < va; u += 4096u)     /* 回滚：这次新映射的页全部退回 */
+                    unmap_page(as, u);
+                return -1;
+            }
+    } else {
+        for (uint32_t va = new_top; va < old_top; va += 4096u)
+            unmap_page(as, va);
+    }
+    as->heap_brk = new_brk;
+    return 0;
+}
 
 void aspace_destroy(aspace_t *as)
 {

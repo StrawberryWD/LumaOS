@@ -43,6 +43,7 @@ typedef __builtin_va_list va_list;
 #define SYS_WRITE     2
 #define SYS_GETABI    3
 #define SYS_STRERROR  4
+#define SYS_BRK       6          /* DAY73 */
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -101,6 +102,35 @@ static inline int luma_syscall3(int nr, int a, int b, int c)
 extern int errno;                         /* 最近一次失败的库函数设置；成功不清零（与 C 标准一致） */
 
 size_t      strlen(const char *s);
+/* DAY73: <string.h> 里最基本的几个（malloc/printf 的使用者天天要用；gcc 也会在拷贝结构体时自己生成 memcpy 调用） */
+void *memcpy(void *dst, const void *src, size_t n);
+void *memmove(void *dst, const void *src, size_t n);
+void *memset(void *dst, int c, size_t n);
+int   memcmp(const void *a, const void *b, size_t n);
+int   strcmp(const char *a, const char *b);
+int   strncmp(const char *a, const char *b, size_t n);
+char *strcpy(char *dst, const char *src);
+char *strncpy(char *dst, const char *src, size_t n);
+char *strchr(const char *s, int c);
+
+/* DAY73: 动态内存。malloc 家族建立在 sbrk（SYS_BRK）之上，见 user/lib/malloc.c 文件头。
+ *   malloc(n)       返回 8 字节对齐的块（至少 n 字节，内容未初始化）；失败 NULL + errno=ENOMEM；malloc(0) 返回一个可 free 的小块
+ *   free(p)         p 必须是 malloc 家族返回的、还没释放的指针，或 NULL（什么也不做）；非法指针/重复释放 -> 报错并 exit(134)
+ *   calloc(a,b)     a*b 字节清零（乘法溢出 -> NULL + ENOMEM）
+ *   realloc(p,n)    改变块大小并保留内容；p==NULL 等于 malloc；n==0 等于 free 并返回 NULL；失败返回 NULL 且原块不变
+ *   sbrk(incr)      移动 program break，返回旧值；失败 (void *)-1 + errno。不要和 malloc 混用 sbrk 来“偷”堆内存
+ *   brk(addr)       把 break 设到 addr；成功 0，失败 -1 + errno
+ *   malloc_check()  遍历整个堆检查所有不变量，0 = 完好，其它值 = 第几条被破坏（调试/测试用）
+ *   malloc_info()   统计：堆总大小、已分配/空闲字节与块数、顶部空闲块大小 */
+void *malloc(size_t n);
+void  free(void *p);
+void *calloc(size_t a, size_t b);
+void *realloc(void *p, size_t n);
+void *sbrk(int incr);
+int   brk(void *addr);
+typedef struct { size_t heap, used, free_bytes, top, nused, nfree; } malloc_info_t;
+void  malloc_info(malloc_info_t *mi);
+int   malloc_check(void);
 const char *strerror(int errnum);         /* 错误号 -> 英文描述；返回的缓冲区属于库（非线程安全，今天只有一个线程） */
 
 ssize_t write(int fd, const void *buf, size_t len);   /* 一次最多写 4096 字节（短写），失败 -1 + errno */

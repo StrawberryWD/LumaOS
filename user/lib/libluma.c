@@ -17,13 +17,6 @@ static int ret_errno(int r)
     return r;
 }
 
-size_t strlen(const char *s)
-{
-    size_t n = 0;
-    while (s[n])
-        n++;
-    return n;
-}
 
 ssize_t write(int fd, const void *buf, size_t len)
 {

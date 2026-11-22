@@ -14,6 +14,7 @@
 #include "elf_loader.h"
 #include "../lib/string.h"
 #include "../mm/aspace.h"
+#include "../syscall/syscall.h"
 #include "urt.h"
 
 /* DAY54: 程序在自己的地址空间里运行——
@@ -50,11 +51,23 @@ int elf_exec_args_hook(const char *path, terminal_t *out, int argc, const char *
         return res->rc;
     }
     int ok = 1;
+    uint32_t seg_end = 0;                                /* DAY73: 最高段末尾 -> 堆起点 */
     for (uint32_t i = 0; ok && i < img.ehdr.e_phnum; i++) {
         const elf32_phdr_t *p = &img.phdr[i];
         if (p->p_type != PT_LOAD || p->p_memsz == 0)
             continue;
         ok = aspace_map_range(&as, p->p_vaddr, p->p_vaddr + p->p_memsz) == 0;
+        if (p->p_vaddr + p->p_memsz > seg_end)
+            seg_end = p->p_vaddr + p->p_memsz;
+    }
+    {   /* DAY73: 堆区 [lo, hi)：lo = 段末尾上取整；hi = lo + 8MB，但不越过栈护栏页（程序放在栈下方时）和用户区上界 */
+        uint32_t lo = (seg_end + 0xFFFu) & ~0xFFFu, hi = lo + LUMA_HEAP_MAX;
+        uint32_t guard = ELF_USER_STACK_BASE - 0x1000u;
+        if (lo <= guard && hi > guard) hi = guard;
+        if (hi > ASPACE_USER_HI || hi < lo) hi = ASPACE_USER_HI;
+        if (lo >= ASPACE_USER_HI || lo < ASPACE_USER_LO) lo = hi = 0;
+        else if (lo > guard && lo < ELF_USER_STACK_TOP + 0x1000u) lo = hi = 0;     /* 段占据栈区：没有堆 */
+        aspace_set_heap(&as, lo, hi);
     }
     if (ok)
         ok = aspace_map_range(&as, ELF_USER_STACK_BASE, ELF_USER_STACK_TOP) == 0;

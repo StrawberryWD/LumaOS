@@ -70,6 +70,9 @@ typedef struct {
     uint32_t pd_phys;      /* 页目录的物理地址（装进 CR3 的值）；0 = 未创建 */
     uint32_t frames;       /* 这个地址空间一共占用的页框数（页目录 + 页表 + 数据页）*/
     uint32_t data_pages;   /* 其中映射给用户区的数据页数 */
+    uint32_t heap_lo;      /* DAY73: 堆起点（页对齐）= 程序最高 PT_LOAD 段末尾向上取整；0 = 没有堆 */
+    uint32_t heap_brk;     /* DAY73: 当前 program break（字节精度；[heap_lo, brk) 可用，页按需映射）*/
+    uint32_t heap_hi;      /* DAY73: 堆上界（不含，页对齐）：brk 不能超过它 */
 } aspace_t;
 
 /* 创建：分配页目录，共享 PDE 照内核页目录拷贝，用户区全空。池空返回 -1。 */
@@ -86,5 +89,16 @@ void aspace_activate(const aspace_t *as);
 void aspace_deactivate(void);
 /* 销毁：释放所有数据页、页表、页目录。不能销毁当前正在使用的（调用者先 deactivate）。 */
 void aspace_destroy(aspace_t *as);
+
+
+/* ---- DAY73: 用户堆（brk） ----
+ * aspace_set_heap：登记堆区 [lo, hi)，brk 起始 = lo。lo/hi 必须页对齐且落在用户区。
+ * aspace_brk：把 brk 移到 new_brk（字节）。映射/回收页：增长时 [旧 brk 向上取整页, new_brk 向上取整页) 里的页各分配一个
+ *   新页框（已清零）；缩小时多出的整页还给 pmm 并 invlpg。失败（越界/页框用完）返回 -1 且 brk 不变，
+ *   增长到一半池空了也会把这次新映射的页退回去（要么全成功，要么什么都没变）。成功返回 0。
+ * aspace_current：当前被 aspace_activate 的地址空间（内核页目录下为 NULL）——系统调用靠它找到“调用者的堆”。 */
+void aspace_set_heap(aspace_t *as, uint32_t lo, uint32_t hi);
+int  aspace_brk(aspace_t *as, uint32_t new_brk);
+aspace_t *aspace_current(void);
 
 #endif

@@ -178,6 +178,24 @@
  *        没登记的错误号得到 "Unknown error"（不是错误）。 */
 #define SYS_STRERROR 4
 
+/* ===================================================================================
+ *  DAY73: SYS_BRK(6) —— 用户堆。  int32 brk(uint32 addr)      eax=6, ebx=addr
+ * ===================================================================================
+ *   程序没有堆：它的地址空间只有 ELF 段 + 64KB 栈（Day 54）。用户态 malloc 需要“向内核要更多页”，
+ *   这就是 brk（“program break”，程序数据段的末端）。堆区 = [heap_lo, heap_hi)：
+ *     heap_lo = 最高 PT_LOAD 段末尾向上取整到页；heap_hi = min(heap_lo + 8MB, 栈护栏页下沿 / 用户区上界)。
+ *   addr == 0：不改变任何东西，返回当前 break（Linux 的 brk(0) 习惯）。
+ *   addr 在 [heap_lo, heap_hi]：把 break 移到 addr（增长 = 内核给新增的整页映射新页框，已清零；
+ *     缩小 = 多出的整页还给页框池）。成功返回新 break（= addr）。
+ *   addr < heap_lo        -> -EINVAL（不能把堆缩到程序自己的段里）
+ *   addr > heap_hi、页框池用完 -> -ENOMEM，break 不变（增长一半失败会回滚）。
+ *   没有程序在运行、或这个地址空间没有堆 -> -ENOMEM / -ESRCH，什么也不改。
+ *   返回值是地址（< 0x0F000000），不会和 [-4095,-1] 的错误区间混淆。
+ *   程序退出时 aspace_destroy 回收所有页，所以堆不会泄漏给下一个程序。
+ *   libluma 的 sbrk()/malloc() 建立在它上面（user/lib/malloc.c）。 */
+#define SYS_BRK      6
+#define LUMA_HEAP_MAX 0x00800000u    /* 每个程序的堆最大 8MB（也受页框池 8MB 总量限制）*/
+
 /* ---- 程序一侧的调用封装（内核自测、测试程序都用它）----
  * 程序是 -fno-pic 的静态可执行文件，ebx 可以直接做输入约束。 */
 static inline int32_t luma_syscall0(uint32_t nr)
