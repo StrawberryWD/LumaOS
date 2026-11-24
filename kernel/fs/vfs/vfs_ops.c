@@ -98,6 +98,19 @@ int vfs_ops_open_node(const char *path, vfs_node_t *node)
     return 0;
 }
 
+int vfs_ops_open_dir(const char *path, vfs_node_t *node)
+{
+    filesystem_t *fs; const char *sub;
+    int r = vfs_ops_split(path, &fs, &sub);
+    if (r < 0) return r;
+    if (!node) return -LUMA_EFAULT;
+    r = open_node(fs, path, sub, node);
+    if (r < 0) return r;
+    if (node->type != VFS_TYPE_DIR) return -LUMA_ENOTDIR;
+    if (!node->fs || !node->fs->readdir) return -LUMA_ENOSYS;
+    return 0;
+}
+
 int vfs_ops_statfs(const char *path, vfs_statfs_t *out)
 {
     filesystem_t *fs; const char *sub;

@@ -48,6 +48,9 @@ typedef __builtin_va_list va_list;
 #define SYS_READ      8
 #define SYS_CLOSE     9
 #define SYS_LSEEK    10
+#define SYS_READDIR  11         /* DAY75 */
+#define SYS_STAT     12
+#define SYS_GETCWD   13
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -206,6 +209,29 @@ void    clearerr(FILE *f);
 int     fileno(FILE *f);
 int     fflush(FILE *f);
 void    perror(const char *s);
+
+/* ===================================================================================
+ * DAY75: 目录、状态、当前目录（内核一侧见 kernel/syscall/fsops.c 和 syscall.h 的 DAY75 一节）
+ * ===================================================================================
+ *   readdir(path, i, &d)  把 path 目录的第 i 个条目（从 0 起，不含 . 和 ..）填进 d：返回 1；i 越过最后一项返回 0；
+ *                         出错 -1 + errno（ENOENT / ENOTDIR / ENODEV）。path 为 ""（空串）时列出所有已挂载的卷。
+ *                         典型循环：for (i = 0; readdir(p, i, &d) == 1; i++) ...
+ *   stat(path, &st)       成功 0：st.type 是 DT_FILE / DT_DIR，st.size 是字节数（目录 0）；失败 -1 + errno
+ *   getcwd(buf, n)        把当前目录写成 "卷/子目录"（如 "IDE3/"），返回 buf；放不下 NULL + ERANGE
+ *   qsort / atoi / strrchr / strcat / strcasecmp / strstr  —— ls/explorer 排序和解析参数用的小工具 */
+#define DT_FILE 1
+#define DT_DIR  2
+typedef struct { unsigned size; unsigned type; char name[32]; } dirent_t;
+typedef struct { unsigned size; unsigned type; } stat_t;
+int   readdir(const char *path, unsigned index, dirent_t *out);
+int   stat(const char *path, stat_t *st);
+char *getcwd(char *buf, size_t size);
+void  qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
+int   atoi(const char *s);
+char *strrchr(const char *s, int c);
+char *strcat(char *dst, const char *src);
+int   strcasecmp(const char *a, const char *b);
+char *strstr(const char *hay, const char *needle);
 
 void    exit(int code) __attribute__((noreturn));      /* SYS_EXIT，永不返回 */
 

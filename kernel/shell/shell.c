@@ -4,6 +4,7 @@
 #include "../fs/vfs/vfs.h"   /* DAY25: vfs_root, vfs_mount_name_of() —
                                 shell_resolve_path() below */
 #include "shell.h"
+#include "../fs/vfs/vfs_ops.h"
 
 shell_cmd_t cmd_table[SHELL_MAX_CMDS];
 int         cmd_count = 0;
@@ -168,6 +169,39 @@ static const char *g_cur_args = "";
 
 const char *shell_cmdline_args(void) { return g_cur_args; }
 
+/* DAY75: 外部命令 = 一个 .sw 程序。name 没有 ".sw" 就补上；含 '/' 的名字只按原样找。
+ * 找到（存在且不是目录）就把 "<程序路径> <原参数>" 当作 `run` 的命令行执行。返回 1 = 已处理。 */
+static int run_external(terminal_t *t, const char *name, int argc, const char *args)
+{
+    (void)argc;
+    static char prog[48], resolved[64], line[256];
+    size_t n = strlen(name);
+    if (n == 0 || n + 4 > sizeof(prog)) return 0;
+    strcpy(prog, name);
+    if (!(n >= 4 && prog[n-3] == '.' && (prog[n-2] == 's' || prog[n-2] == 'S') && (prog[n-1] == 'w' || prog[n-1] == 'W')))
+        strcpy(prog + n, ".sw");
+    const char *cands[2] = { prog, 0 };
+    static char sys_cand[64];
+    if (!strchr(prog, '/')) {                       /* 裸名字：再试系统卷 */
+        strcpy(sys_cand, "RAM0/");
+        if (strlen(prog) + 6 <= sizeof(sys_cand)) { strcpy(sys_cand + 5, prog); cands[1] = sys_cand; }
+    }
+    for (int i = 0; i < 2; i++) {
+        if (!cands[i]) continue;
+        uint32_t size; int is_dir = 0;
+        if (shell_resolve_path(cands[i], resolved, sizeof(resolved)) != 0) continue;
+        if (vfs_ops_stat(resolved, &size, &is_dir) != 0 || is_dir) continue;
+        if (strlen(cands[i]) + 1 + strlen(args) + 1 > sizeof(line)) return 0;
+        strcpy(line, cands[i]);
+        if (args[0]) { size_t l = strlen(line); line[l] = ' '; strcpy(line + l + 1, args); }
+        g_cur_args = line;
+        char *fake[2] = { (char *)"run", (char *)cands[i] };
+        cmd_run(t, 2, fake);          /* cmd_run 只检查 argc >= 2，程序和参数从 g_cur_args 重新切词 */
+        return 1;
+    }
+    return 0;
+}
+
 void shell_exec(terminal_t *t, const char *cmdline) {
     int blank = 1;
     for (int i = 0; cmdline[i]; i++)
@@ -189,6 +223,10 @@ void shell_exec(terminal_t *t, const char *cmdline) {
             return;
         }
     }
+    /* DAY75: 不是内置命令——找同名的用户程序（.sw）：先当前目录，再系统卷 RAM0（live CD 带来的 cat.sw ls.sw explorer.sw ...）。
+     * 这是“内置命令迁移到用户态”的机制：以后把某个内置命令删掉，同名 .sw 就自动顶上，用户敲的命令不变。 */
+    if (run_external(t, argv_p[0], argc, g_cur_args))
+        { g_cur_args = ""; return; }
     g_cur_args = "";
     terminal_puts(t, "Unknown: ", TERM_COL_ERROR);
     terminal_puts(t, argv_p[0],  TERM_COL_ERROR);

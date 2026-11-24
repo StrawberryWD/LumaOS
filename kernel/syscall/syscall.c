@@ -11,6 +11,7 @@
 #include "syscall.h"
 #include "../mm/aspace.h"
 #include "fd.h"
+#include "fsops.h"
 #include "../arch/isr_context.h"
 #include "../mm/paging.h"
 
@@ -167,6 +168,14 @@ static int32_t sys_close(uint32_t fd, uint32_t a2, uint32_t a3, uint32_t a4, uin
 static int32_t sys_lseek(uint32_t fd, uint32_t off, uint32_t whence, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a4; (void)a5; (void)a6; return fd_lseek((int32_t)fd, (int32_t)off, whence); }
 
+/* DAY75: 目录/状态/当前目录（实现在 fsops.c） */
+static int32_t sys_readdir(uint32_t path, uint32_t idx, uint32_t out, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a4; (void)a5; (void)a6; return fsops_readdir((const char *)(uintptr_t)path, idx, out); }
+static int32_t sys_stat(uint32_t path, uint32_t out, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a3; (void)a4; (void)a5; (void)a6; return fsops_stat((const char *)(uintptr_t)path, out); }
+static int32_t sys_getcwd(uint32_t buf, uint32_t size, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a3; (void)a4; (void)a5; (void)a6; return fsops_getcwd(buf, size); }
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -180,6 +189,9 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_READ]   = sys_read,
     [SYS_CLOSE]  = sys_close,
     [SYS_LSEEK]  = sys_lseek,
+    [SYS_READDIR]= sys_readdir,     /* DAY75 */
+    [SYS_STAT]   = sys_stat,
+    [SYS_GETCWD] = sys_getcwd,
 };
 
 static syscall_stats_t g_stats;

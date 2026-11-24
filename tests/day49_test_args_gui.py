@@ -50,7 +50,7 @@ try:
     m.line('run args.sw "abc', 2.0)
     check("unterminated quote reported", "unterminated quote" in tail_of('run args.sw "abc'))
     m.line("ls", 1.5)
-    check("terminal still alive (ls works)", "hello.sw" in tail_of("ls"))
+    check("terminal still alive (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
 finally:
     m.close()
 print("\nFAILED: %s" % fails if fails else "\nALL PASS")

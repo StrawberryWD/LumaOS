@@ -57,7 +57,7 @@ try:
     t = tail_of("run nope.sw")
     check("missing file", "cannot open file" in t, t)
     m.line("ls", 1.5)
-    check("terminal still alive (ls works)", "hello.sw" in tail_of("ls"))
+    check("terminal still alive (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
     m.png(f"{out}/2_after.png")
 finally:
     m.close()

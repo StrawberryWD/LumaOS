@@ -49,7 +49,7 @@ try:
     check("kernel SYS_EXIT -> -ESRCH, self-test OK", "sysstat: OK" in tail_of("sysstat -t"))
     m.png(f"{out}/2_after.png")
     m.line("ls", 1.5)
-    check("keyboard + terminal alive after the exits (ls works)", "hello.sw" in tail_of("ls"))
+    check("keyboard + terminal alive after the exits (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
 finally:
     m.close()
 print("\nFAILED: %s" % fails if fails else "\nALL PASS")

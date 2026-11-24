@@ -48,7 +48,7 @@ try:
     t = tail_of("run hello.sw luma")
     check("run hello.sw luma still works", "Hello, luma!" in t, t)
     m.line("ls", 1.5)
-    check("terminal still alive (ls works)", "hello.sw" in tail_of("ls"))
+    check("terminal still alive (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
 finally:
     m.close()
 print("\nFAILED: %s" % fails if fails else "\nALL PASS")

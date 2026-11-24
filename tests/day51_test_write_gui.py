@@ -50,7 +50,7 @@ try:
     m.line("run IDE0/HELLO.SW", 3.0)
     check("FAT copy prints too", "Hello from hello.sw!" in tail_of("run IDE0/HELLO.SW"))
     m.line("ls", 1.5)
-    check("terminal still alive (ls works)", "hello.sw" in tail_of("ls"))
+    check("terminal still alive (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
 finally:
     m.close()
 print("\nFAILED: %s" % fails if fails else "\nALL PASS")

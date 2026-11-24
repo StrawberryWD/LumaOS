@@ -213,7 +213,32 @@
 #define SYS_OPEN     7
 #define SYS_READ     8
 #define SYS_CLOSE    9
-#define SYS_LSEEK   10    /* 每个程序的堆最大 8MB（也受页框池 8MB 总量限制）*/
+#define SYS_LSEEK   10
+
+/* ===================================================================================
+ *  DAY75: 目录与状态（kernel/syscall/fsops.c）——让 ls / explorer 这类程序能“看”文件系统
+ * ===================================================================================
+ *  11 SYS_READDIR  int readdir(const char *path, uint32_t index, luma_dirent_t *out)   ebx=path, ecx=index, edx=out
+ *       把 path 这个目录的第 index 个条目（0 起）写进 *out，返回 1；index 已越过最后一项返回 0（循环结束的信号）；
+ *       出错 -errno（-ENOENT 不存在，-ENOTDIR 是文件，-ENODEV 卷不存在，-EFAULT 指针坏）。
+ *       "." 和 ".." 不算条目（内核跳过，和 shell 的 ls 一致），所以 index 数的是“看得见的”条目。
+ *       path == ""（空串）是特殊的：列出“所有已挂载的卷”（RAM0 CD0 IDE0 ...），类型都是目录。
+ *       每次调用都重新解析路径，所以循环 readdir(path, 0..n) 是 O(n^2)——目录只有几十到几百项，可接受；
+ *       以后若要 O(n)，可以像 open 一样给“目录 fd”。
+ *  12 SYS_STAT     int stat(const char *path, luma_stat_t *out)                       ebx=path, ecx=out
+ *       成功 0，写入类型和大小（目录大小 0）。-ENOENT / -ENODEV / -EFAULT / -ENAMETOOLONG。
+ *  13 SYS_GETCWD   int getcwd(char *buf, size_t size)                                 ebx=buf, ecx=size
+ *       把当前目录写成 "卷/子目录"（如 "IDE3/" 或 "RAM0/docs"），返回长度（不含 NUL）；放不下 -ERANGE。
+ *       当前目录是 shell 的（`cd` 设置的），程序不能改它（没有 chdir：还没必要）。
+ * 路径解析与 open 完全相同（相对路径按 cwd，"IDE3/x" 全名）。 */
+#define SYS_READDIR 11
+#define SYS_STAT    12
+#define SYS_GETCWD  13
+
+#define LUMA_DT_FILE 1
+#define LUMA_DT_DIR  2
+typedef struct { uint32_t size; uint32_t type; char name[32]; } luma_dirent_t;   /* name 与 vfs_node_t.name 一样长 */
+typedef struct { uint32_t size; uint32_t type; } luma_stat_t;    /* 每个程序的堆最大 8MB（也受页框池 8MB 总量限制）*/
 
 /* ---- 程序一侧的调用封装（内核自测、测试程序都用它）----
  * 程序是 -fno-pic 的静态可执行文件，ebx 可以直接做输入约束。 */

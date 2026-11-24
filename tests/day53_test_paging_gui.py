@@ -47,7 +47,7 @@ try:
     m.line("run hello.sw luma", 3.0)
     check("run hello.sw luma works", "Hello, luma!" in tail_of("run hello.sw luma"))
     m.line("ls", 1.5)
-    check("terminal alive (ls works)", "hello.sw" in tail_of("ls"))
+    check("terminal alive (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
     m.png(f"{out}/2_end.png")
 finally:
     m.close()

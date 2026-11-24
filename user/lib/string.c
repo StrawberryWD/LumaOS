@@ -78,3 +78,62 @@ size_t strlen(const char *s)                              /* DAY71 起就有；D
         n++;
     return n;
 }
+
+/* ---- DAY75: ls / explorer 要用的几个小函数 ---- */
+char *strrchr(const char *s, int c)
+{
+    const char *last = NULL;
+    for (;; s++) {
+        if (*s == (char)c) last = s;
+        if (!*s) return (char *)last;
+    }
+}
+
+char *strcat(char *dst, const char *src)
+{
+    strcpy(dst + strlen(dst), src);
+    return dst;
+}
+
+static int lower(int c) { return (c >= 'A' && c <= 'Z') ? c + 32 : c; }
+int strcasecmp(const char *a, const char *b)
+{
+    while (*a && lower((unsigned char)*a) == lower((unsigned char)*b)) { a++; b++; }
+    return lower((unsigned char)*a) - lower((unsigned char)*b);
+}
+
+char *strstr(const char *hay, const char *needle)
+{
+    size_t n = strlen(needle);
+    if (n == 0) return (char *)hay;
+    for (; *hay; hay++)
+        if (*hay == *needle && strncmp(hay, needle, n) == 0) return (char *)hay;
+    return NULL;
+}
+
+int atoi(const char *s)
+{
+    int neg = 0, v = 0;
+    while (*s == ' ' || *s == '\t') s++;
+    if (*s == '-') { neg = 1; s++; } else if (*s == '+') s++;
+    while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0');
+    return neg ? -v : v;
+}
+
+/* qsort：Shell 排序（Knuth 间隔 1,4,13,40...）。非递归、原地、不需要额外内存，所以不依赖 malloc，也不会爆栈。
+ * 不稳定（相等元素的相对顺序可能变）；对几百个目录项绰绰有余。逐字节交换，size 任意。 */
+void qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *))
+{
+    unsigned char *b = base;
+    size_t gap = 1;
+    while (gap < n / 3) gap = gap * 3 + 1;
+    for (; gap > 0; gap /= 3) {
+        for (size_t i = gap; i < n; i++) {
+            for (size_t j = i; j >= gap && cmp(b + (j - gap) * size, b + j * size) > 0; j -= gap) {
+                unsigned char *x = b + (j - gap) * size, *y = b + j * size;
+                for (size_t k = 0; k < size; k++) { unsigned char t = x[k]; x[k] = y[k]; y[k] = t; }
+            }
+        }
+        if (gap == 1) break;
+    }
+}

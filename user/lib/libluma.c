@@ -24,6 +24,17 @@ ssize_t read(int fd, void *buf, size_t len)       { return ret_errno(luma_syscal
 int close(int fd)                                 { return ret_errno(luma_syscall3(SYS_CLOSE, fd, 0, 0)); }
 int lseek(int fd, int off, int whence)            { return ret_errno(luma_syscall3(SYS_LSEEK, fd, off, whence)); }
 
+/* DAY75 */
+int readdir(const char *path, unsigned index, dirent_t *out)
+{ return ret_errno(luma_syscall3(SYS_READDIR, (int)path, (int)index, (int)out)); }
+int stat(const char *path, stat_t *st)            { return ret_errno(luma_syscall3(SYS_STAT, (int)path, (int)st, 0)); }
+char *getcwd(char *buf, size_t size)
+{
+    int r = luma_syscall3(SYS_GETCWD, (int)buf, (int)size, 0);
+    if (r < 0) { errno = -r; return NULL; }
+    return buf;
+}
+
 ssize_t write(int fd, const void *buf, size_t len)
 {
     return ret_errno(luma_syscall3(SYS_WRITE, fd, (int)buf, (int)len));

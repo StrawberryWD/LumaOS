@@ -56,7 +56,7 @@ try:
     t = tail_of("pginfo")
     check("pool back to 2048 of 2048, 0 faults", "2048 of 2048 frames free" in t and "page faults handled: 0" in t, t)
     m.line("ls", 1.5)
-    check("terminal alive (ls works)", "hello.sw" in tail_of("ls"))
+    check("terminal alive (ls works)", any(n in tail_of("ls") for n in ("hello.sw", "putc.sw", "printf.sw", "malloc.sw", "fileio.sw", "explorer.sw")))
     m.png(f"{out}/3_end.png")
 finally:
     m.close()
