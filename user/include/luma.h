@@ -52,6 +52,10 @@ typedef __builtin_va_list va_list;
 #define SYS_STAT     12
 #define SYS_GETCWD   13
 #define SYS_EXECVE   14         /* DAY76 */
+#define SYS_FORK     15         /* DAY77 */
+#define SYS_WAIT     16
+#define SYS_GETPID   17
+#define SYS_YIELD    18
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -82,6 +86,8 @@ typedef __builtin_va_list va_list;
 #define ERANGE      34
 #define ENAMETOOLONG 36
 #define ENOSYS      38
+#define ECHILD      10          /* DAY77 */
+#define EAGAIN      11
 #define ENOTEMPTY   39
 #define EUCLEAN    117
 
@@ -230,6 +236,17 @@ int   stat(const char *path, stat_t *st);
  * 打开的文件全部关闭，堆/栈全部是新的）；失败返回 -1 + errno（ENOENT EISDIR ENOEXEC E2BIG ENOMEM EFAULT ...），当前程序继续。
  * argv 以 NULL 结尾（argv 本身可以是 NULL，相当于没有参数）。 */
 int   execv(const char *path, char *const argv[]);
+/* DAY77: 进程。fork()：父进程得到子 pid，子进程得到 0（地址空间、fd 表整份复制，之后互不影响）；失败 -1 + errno（EAGAIN 进程表满 / ENOMEM）。
+ * wait(&st)：等任意一个子进程结束，返回它的 pid；st 可为 NULL；没有子进程 -1 + ECHILD。
+ * 状态字：正常退出 WIFEXITED(st) 为真、WEXITSTATUS(st) 是退出码；被异常杀死（如访问 NULL）WIFSIGNALED(st) 为真。
+ * getpid()：没 fork 过的程序是 1。yield()：把 CPU 让给别的进程（今天没有时钟抢占，进程只在 wait/yield/exit 时切换）。 */
+int   fork(void);
+int   wait(int *status);
+int   getpid(void);
+int   yield(void);
+#define WIFEXITED(s)    (((s) & 0x7F) == 0)
+#define WEXITSTATUS(s)  (((s) >> 8) & 0xFF)
+#define WIFSIGNALED(s)  (((s) & 0x7F) != 0)
 char *getcwd(char *buf, size_t size);
 void  qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
 int   atoi(const char *s);

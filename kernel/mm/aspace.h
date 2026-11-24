@@ -101,4 +101,8 @@ void aspace_set_heap(aspace_t *as, uint32_t lo, uint32_t hi);
 int  aspace_brk(aspace_t *as, uint32_t new_brk);
 aspace_t *aspace_current(void);
 
+/* DAY77: fork 用。把 src 的整个用户区复制成一个新地址空间 dst：每个已映射的页新分配页框、拷贝内容、保留原来的权限位
+ * （运行时页仍然只读），堆区登记也照抄。成功 0；池空返回 -1 且 dst 已清理干净（什么都没占）。 */
+int aspace_clone(const aspace_t *src, aspace_t *dst);
+
 #endif

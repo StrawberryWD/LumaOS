@@ -42,6 +42,26 @@ void fd_reset(void)
     g_open = 0;
 }
 
+/* DAY77: 整张表（含 g_open）的保存/恢复。file.node 指向槽位自己的 node 副本，所以恢复后要把指针重新指好。 */
+typedef struct { fd_slot_t slot[LUMA_FD_MAX]; int open; } fd_state_t;
+_Static_assert(sizeof(fd_state_t) <= LUMA_FD_STATE_MAX, "LUMA_FD_STATE_MAX too small");
+unsigned fd_state_size(void) { return (unsigned)sizeof(fd_state_t); }
+void fd_state_save(void *buf)
+{
+    fd_state_t *st = (fd_state_t *)buf;
+    memcpy(st->slot, g_fd, sizeof(g_fd));
+    st->open = g_open;
+}
+void fd_state_load(const void *buf)
+{
+    const fd_state_t *st = (const fd_state_t *)buf;
+    memcpy(g_fd, st->slot, sizeof(g_fd));
+    g_open = st->open;
+    for (int i = 0; i < LUMA_FD_MAX; i++)
+        if (g_fd[i].used)
+            g_fd[i].file.node = &g_fd[i].node;
+}
+
 int fd_open_count(void) { return g_open; }
 
 /* 从用户内存拷贝 NUL 结尾的路径。每个字节单独检查（页边界会变），最长 max-1 字符。 */

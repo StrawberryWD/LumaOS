@@ -9,6 +9,7 @@
 #include "elf_run.h"
 #include "../lib/string.h"
 #include "urt.h"
+extern void proc_on_exit(int code, int via);        /* DAY77 */
 
 /* 汇编跳板：存现场 -> 切到用户栈 -> 跳到 entry(api) -> 统一出口 -> 恢复现场，
  * 返回程序的退出码。elf_api_exit 是给程序的 api->exit；elf_exit_via 记录走了哪条路。 */
@@ -178,7 +179,7 @@ void elf_reenter_user(const elf_image_t *img, int argc, const char *const *argv)
     uint32_t api_va = urt_api_va();
     uint32_t frame_top = ELF_USER_STACK_TOP, argv_addr = 0;
     if (api_va == 0 || !stack_prepare() || args_install(argc, argv, &frame_top, &argv_addr) != ELF_OK)
-        elf_sys_exit(127, 1);
+        { proc_on_exit(127, 1); elf_sys_exit(127, 1); }
     g_out_total = 0;
     g_out_last = 0;
     elf_ret_stub_va = urt_ret_stub_va();

@@ -19,6 +19,7 @@
 
 extern uint32_t elf_running;
 extern void     elf_sys_exit(int code, int via);
+extern void     proc_on_exit(int code, int via);     /* DAY77: kernel/proc/proc.c */
 
 elf_fault_t elf_fault_last;
 
@@ -42,6 +43,7 @@ void elf_fault_kill(const isr_context_t *ctx, uint32_t vector)
                             ? ctx->err_code : 0;
     elf_fault_last.addr   = (vector == 14) ? read_cr2_() : 0;
     elf_fault_last.eip    = ctx->eip;
+    proc_on_exit((int)(vector == ELF_FAULT_CTRL_C ? 130 : 128 + vector), (int)ELF_VIA_KILLED);   /* DAY77 */
     elf_sys_exit((int)(vector == ELF_FAULT_CTRL_C ? 130 : 128 + vector), (int)ELF_VIA_KILLED);   /* 不返回 */
 }
 

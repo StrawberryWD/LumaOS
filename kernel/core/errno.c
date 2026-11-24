@@ -23,6 +23,8 @@ static const errinfo_t g_errs[] = {
     { LUMA_E2BIG,        "E2BIG",        "Argument list too long" },
     { LUMA_ENOEXEC,      "ENOEXEC",      "Exec format error (not a valid .sw program)" },
     { LUMA_EBADF,        "EBADF",        "Bad file descriptor" },
+    { LUMA_ECHILD,       "ECHILD",       "No child processes" },
+    { LUMA_EAGAIN,       "EAGAIN",       "Resource temporarily unavailable" },
     { LUMA_ENOMEM,       "ENOMEM",       "Out of memory" },
     { LUMA_EACCES,       "EACCES",       "Permission denied" },
     { LUMA_EFAULT,       "EFAULT",       "Bad address" },

@@ -30,6 +30,10 @@ int readdir(const char *path, unsigned index, dirent_t *out)
 int stat(const char *path, stat_t *st)            { return ret_errno(luma_syscall3(SYS_STAT, (int)path, (int)st, 0)); }
 int execv(const char *path, char *const argv[])
 { return ret_errno(luma_syscall3(SYS_EXECVE, (int)path, (int)argv, 0)); }
+int fork(void)            { return ret_errno(luma_syscall3(SYS_FORK, 0, 0, 0)); }
+int wait(int *status)     { return ret_errno(luma_syscall3(SYS_WAIT, (int)status, 0, 0)); }
+int getpid(void)          { return ret_errno(luma_syscall3(SYS_GETPID, 0, 0, 0)); }
+int yield(void)           { return ret_errno(luma_syscall3(SYS_YIELD, 0, 0, 0)); }
 char *getcwd(char *buf, size_t size)
 {
     int r = luma_syscall3(SYS_GETCWD, (int)buf, (int)size, 0);

@@ -17,6 +17,7 @@
 #include "../syscall/syscall.h"
 #include "../syscall/fd.h"
 #include "elf_run.h"
+#include "../proc/proc.h"
 #include "urt.h"
 
 /* DAY76: 建地址空间（映射段 + 堆 + 栈 + 运行时页）。成功 0；失败 ELF_ERR_NO_MEMORY（as 已销毁）。 */
@@ -111,6 +112,7 @@ int elf_exec_args_hook(const char *path, terminal_t *out, int argc, const char *
     if (hook)
         hook(ctx, &img, res);
 
+    proc_reset();                                        /* DAY77: 新程序从“没人 fork 过”开始 */
     fd_reset();                                          /* DAY74: 每个程序一张干净的 fd 表 */
     rc = elf_run_args(&img, out, argc, argv, &res->code, &res->info);   /* Day 46/47/49 */
     fd_reset();                                          /* 无论怎么结束，忘记关的文件在这里关掉 */

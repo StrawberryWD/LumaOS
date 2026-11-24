@@ -246,6 +246,18 @@
  *            -E2BIG 参数太多/太长；-ENOMEM 页框不够；-EIO 读盘失败。 */
 #define SYS_EXECVE  14
 
+/* ---- DAY77: 进程（kernel/proc/proc.c，设计见 proc.h） ----
+ *  15 SYS_FORK     int fork(void)          父进程得到子 pid，子进程得到 0；复制整个地址空间和 fd 表。-EAGAIN 进程表满 / -ENOMEM
+ *  16 SYS_WAIT     int wait(int *status)   等任意一个子进程结束，返回它的 pid；status（可为 NULL）= 退出码<<8（被杀死则低 7 位非 0）。
+ *                                          没有子进程 -ECHILD；status 是坏指针 -EFAULT
+ *  17 SYS_GETPID   int getpid(void)        没 fork 过的程序是 1
+ *  18 SYS_YIELD    int yield(void)         把 CPU 让给别的可运行进程（今天没有时钟抢占，进程只在 wait/yield/exit 时切换）
+ *  exit 的语义不变；父进程先退出时，它还活着的子孙会先跑完再回到 shell。 */
+#define SYS_FORK    15
+#define SYS_WAIT    16
+#define SYS_GETPID  17
+#define SYS_YIELD   18
+
 #define LUMA_DT_FILE 1
 #define LUMA_DT_DIR  2
 typedef struct { uint32_t size; uint32_t type; char name[32]; } luma_dirent_t;   /* name 与 vfs_node_t.name 一样长 */

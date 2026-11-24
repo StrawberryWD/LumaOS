@@ -13,6 +13,7 @@
 #include "fd.h"
 #include "fsops.h"
 #include "../exec/elf_exec.h"
+#include "../proc/proc.h"
 #include "../exec/elf.h"
 #include "../shell/shell.h"
 #include "../arch/isr_context.h"
@@ -107,6 +108,8 @@ static int32_t sys_write(uint32_t fd, uint32_t buf, uint32_t len, uint32_t a4, u
 }
 
 /* SYS_EXIT(code)：见 syscall.h 的 DAY52 一节。成功时不返回。 */
+static const isr_context_t *g_cur_ctx;   /* DAY77: 当前这次系统调用的中断帧（fork 要把它复制给子进程） */
+const isr_context_t *syscall_current_ctx(void) { return g_cur_ctx; }
 static syscall_stats_t g_stats;          /* 下面再次出现是同一个对象（C 的暂定定义）；sys_exit 要读 last_eip */
 extern void elf_sys_exit(int code, int via);  /* kernel/exec/elf_enter.asm: 切回内核栈的统一出口 */
 extern int  urt_exit_via(uint32_t eip);      /* kernel/exec/urt.c: DAY55 按调用者 eip 判断退出方式 */
@@ -117,6 +120,7 @@ static int32_t sys_exit(uint32_t code, uint32_t a2, uint32_t a3, uint32_t a4, ui
     (void)a2; (void)a3; (void)a4; (void)a5; (void)a6;
     if (!elf_running)
         return -LUMA_ESRCH;               /* 没有程序可结束：不跳 */
+    proc_on_exit((int)code, urt_exit_via(g_stats.last_eip));     /* DAY77: 子进程在这里变僵尸并切走；根进程等子孙跑完才回来 */
     elf_sys_exit((int)code, urt_exit_via(g_stats.last_eip));   /* 不返回 */
     return 0;
 }
@@ -225,6 +229,15 @@ static int32_t sys_execve(uint32_t upath, uint32_t uargv, uint32_t a3, uint32_t 
     }
 }
 
+static int32_t sys_fork(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return proc_fork(); }
+static int32_t sys_wait(uint32_t st, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return proc_wait(st); }
+static int32_t sys_getpid(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return proc_getpid(); }
+static int32_t sys_yield(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; proc_yield(); return 0; }
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -242,6 +255,10 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_STAT]   = sys_stat,
     [SYS_GETCWD] = sys_getcwd,
     [SYS_EXECVE] = sys_execve,      /* DAY76 */
+    [SYS_FORK]   = sys_fork,        /* DAY77 */
+    [SYS_WAIT]   = sys_wait,
+    [SYS_GETPID] = sys_getpid,
+    [SYS_YIELD]  = sys_yield,
 };
 
 static syscall_stats_t g_stats;
@@ -260,6 +277,7 @@ void syscall_dispatch(struct isr_context *c)
     int32_t ret;
 
     /* DAY52: 记录先于调用——SYS_EXIT 不会返回到这里。last_ret 在返回后再补（SYS_EXIT 记退出码）。 */
+    g_cur_ctx = ctx;
     g_stats.calls++;
     g_stats.last_nr = nr;
     g_stats.last_ret = (nr == SYS_EXIT) ? (int32_t)ctx->ebx : 0;

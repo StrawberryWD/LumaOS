@@ -30,6 +30,8 @@
 #define LUMA_EPERM          1     /* 操作不被允许 */
 #define LUMA_ENOENT         2     /* 文件或目录不存在 */
 #define LUMA_ESRCH          3     /* 没有这样的进程（Day 52：SYS_EXIT 时没有程序在运行） */
+#define LUMA_ECHILD        10     /* 没有子进程可等（DAY77: wait） */
+#define LUMA_EAGAIN        11     /* 暂时没有资源（DAY77: 进程表满了，fork 稍后再试） */
 #define LUMA_EIO            5     /* 底层读写（磁盘/光驱）出错 */
 #define LUMA_E2BIG          7     /* 参数/路径列表太长 */
 #define LUMA_ENOEXEC        8     /* 不是可执行文件（ELF 校验失败） */

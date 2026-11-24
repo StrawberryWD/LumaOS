@@ -148,3 +148,37 @@ void aspace_destroy(aspace_t *as)
     pmm_free(as->pd_phys);
     as->pd_phys = 0; as->frames = 0; as->data_pages = 0;
 }
+
+/* DAY77: 复制整个用户地址空间（fork）。内核对物理页框是恒等映射，所以可以直接按物理地址拷贝。 */
+int aspace_clone(const aspace_t *src, aspace_t *dst)
+{
+    if (!src->pd_phys || aspace_create(dst) != 0)
+        return -1;
+    dst->heap_lo = src->heap_lo; dst->heap_brk = src->heap_brk; dst->heap_hi = src->heap_hi;
+    uint32_t *spd = pd_ptr(src), *dpd = pd_ptr(dst);
+    for (uint32_t d = ASPACE_PDE_LO; d < ASPACE_PDE_HI; d++) {
+        if (!(spd[d] & PTE_P))
+            continue;
+        uint32_t npt = pmm_alloc();
+        if (!npt) { aspace_destroy(dst); return -1; }
+        dst->frames++;
+        uint32_t *spt = (uint32_t *)(uintptr_t)(spd[d] & 0xFFFFF000u);
+        uint32_t *dpt = (uint32_t *)(uintptr_t)npt;
+        for (uint32_t i = 0; i < 1024; i++)
+            dpt[i] = 0;
+        dpd[d] = npt | (spd[d] & 0xFFFu);
+        for (uint32_t i = 0; i < 1024; i++) {
+            if (!(spt[i] & PTE_P))
+                continue;
+            uint32_t fr = pmm_alloc();
+            if (!fr) { aspace_destroy(dst); return -1; }
+            dst->frames++; dst->data_pages++;
+            const uint32_t *from = (const uint32_t *)(uintptr_t)(spt[i] & 0xFFFFF000u);
+            uint32_t *to = (uint32_t *)(uintptr_t)fr;
+            for (uint32_t k = 0; k < 1024; k++)
+                to[k] = from[k];
+            dpt[i] = fr | (spt[i] & 0xFFFu);
+        }
+    }
+    return 0;
+}

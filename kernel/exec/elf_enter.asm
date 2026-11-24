@@ -73,6 +73,8 @@ section .text
 global elf_enter
 global elf_sys_exit
 global elf_reenter
+global proc_switch
+global proc_child_start
 global elf_running
 global elf_ret_stub_va
 extern kernel_tss
@@ -155,7 +157,7 @@ elf_reenter:
     push edx
     push edi
     mov  edi, esp
-    mov  esp, [elf_saved_esp]
+    mov  esp, [kernel_tss + 4]  ; DAY77: 当前进程自己的内核栈（根进程里它等于 elf_saved_esp）
     push dword 0x3B
     push edi
     push dword 0x202
@@ -173,6 +175,42 @@ elf_reenter:
     xor  esi, esi
     xor  edi, edi
     xor  ebp, ebp
+    iretd
+
+; DAY77: proc_switch(uint32_t *save_esp, uint32_t new_esp) —— 协作式内核栈切换。
+; 压入 callee-saved 寄存器，把 esp 存到 *save_esp，换成 new_esp，弹出对方的寄存器，ret 到对方上次停下的地方。
+proc_switch:
+    mov  eax, [esp + 4]
+    mov  edx, [esp + 8]
+    push ebp
+    push ebx
+    push esi
+    push edi
+    mov  [eax], esp
+    mov  esp, edx
+    pop  edi
+    pop  esi
+    pop  ebx
+    pop  ebp
+    ret
+
+; DAY77: 新子进程第一次被切到时 proc_switch 的 ret 落在这里。此时 esp 指向 fork 在子进程内核栈上
+; 放好的那份中断帧拷贝（eax 槽已置 0），后面就是 isr_common 出口的逆序弹栈 + iret —— 子进程于是
+; “从 int 0x80 返回”，返回值 0。
+proc_child_start:
+    pop  gs
+    pop  fs
+    pop  es
+    pop  ds
+    pop  edi
+    pop  esi
+    pop  ebp
+    add  esp, 4
+    pop  ebx
+    pop  edx
+    pop  ecx
+    pop  eax
+    add  esp, 8
     iretd
 
 elf_sys_exit:

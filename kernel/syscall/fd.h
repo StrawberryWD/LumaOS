@@ -45,4 +45,11 @@ int32_t fd_open(const char *upath, uint32_t flags);  /* 用户指针；返回 fd
 int32_t fd_read(int32_t fd, uint32_t ubuf, uint32_t len);
 int32_t fd_close(int32_t fd);
 int32_t fd_lseek(int32_t fd, int32_t off, uint32_t whence);
+
+/* DAY77: 进程切换时保存/恢复整张 fd 表（每个进程一张）。buf 至少 fd_state_size() 字节；fd_fork_state 不碰当前表。 */
+#define LUMA_FD_STATE_MAX 16384
+unsigned fd_state_size(void);
+void fd_state_save(void *buf);
+void fd_state_load(const void *buf);
+
 #endif
