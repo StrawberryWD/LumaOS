@@ -283,7 +283,7 @@ def build_root_dir_block():
     return bytes(buf)
 
 
-def build_root_inode():
+def build_root_inode(extra_dir_blocks=()):
     """0 号 inode：根目录（doc 第八节 type 字段、第九节 inode 0 = 根
     目录的约定）。DAY34 起根目录不再是空的：分配了 1 个数据块（块号
     ROOT_DIR_BLOCK_NUM=1，见 build_root_dir_block()），file_size 记
@@ -291,10 +291,10 @@ def build_root_inode():
     块装目录项"，不是"实际用了几个目录项的字节数"——块里没用满的
     槽位靠 used=0 标记，不需要靠 file_size 精确到字节）。
     """
-    direct = [ROOT_DIR_BLOCK_NUM] + [BLOCK_NONE] * 7
+    direct = ([ROOT_DIR_BLOCK_NUM] + list(extra_dir_blocks) + [BLOCK_NONE] * 8)[:8]   # DAY76: 多个目录块
     return struct.pack(
         INODE_FMT,
-        BLOCK_SIZE,      # file_size：1 个块的目录数据
+        BLOCK_SIZE * (1 + len(extra_dir_blocks)),      # file_size：1 个块的目录数据
         0,               # created_time：无 RTC 驱动，固定 0（doc 第八节）
         LMFS_TYPE_DIR,   # type = 2 目录
         *direct,
@@ -329,9 +329,10 @@ def plan_files(files, layout):
     """DAY44: 给 --add 的每个文件分配 inode 号/数据块号，只做规划不写盘。
     inode 号从 1 起顺序分配；数据块号从 2 起顺序分配（0=哨兵，1=根目录）。
     返回 [dict(name, data, inode, blocks, index_block)]，并检查容量。"""
-    if len(files) > DIRENTS_PER_BLOCK - 2:
-        raise ValueError("根目录只有 1 个目录块，最多 --add %d 个文件"
-                         % (DIRENTS_PER_BLOCK - 2))
+    # DAY76: 根目录可以有最多 8 个目录块（direct[0..7]，内核 lmfs.c 本来就支持目录多块），
+    #        第 1 块是 ROOT_DIR_BLOCK_NUM，多出来的块在所有文件的数据块之后分配。
+    if len(files) > 8 * DIRENTS_PER_BLOCK - 2:
+        raise ValueError("根目录最多 8 个目录块，最多 --add %d 个文件" % (8 * DIRENTS_PER_BLOCK - 2))
     plans = []
     next_inode = 1
     next_block = ROOT_DIR_BLOCK_NUM + 1
@@ -355,6 +356,10 @@ def plan_files(files, layout):
         plans.append(dict(name=name, data=data, inode=next_inode,
                           blocks=blocks, index_block=index_block))
         next_inode += 1
+    extra_dir = (2 + len(files) + DIRENTS_PER_BLOCK - 1) // DIRENTS_PER_BLOCK - 1
+    plans_extra = list(range(next_block, next_block + extra_dir))
+    next_block += extra_dir
+    plans.append(dict(name=None, extra_dir_blocks=plans_extra))
     if next_block > layout["data_block_count"]:
         raise ValueError("镜像太小，放不下 --add 的文件（需要到块号 %d，只有 %d 块）"
                          % (next_block - 1, layout["data_block_count"]))
@@ -364,8 +369,9 @@ def plan_files(files, layout):
 def make_image(output_path, total_sectors, inode_count, verbose=True, files=()):
     layout = build_layout(total_sectors, inode_count)
     plans = plan_files(list(files), layout)
+    extra_dir_blocks = plans.pop()["extra_dir_blocks"]      # DAY76: 根目录的第 2、3… 个目录块
     used_inodes = {ROOT_INODE_NUM} | {p["inode"] for p in plans}
-    used_blocks = {BLOCK_NONE, ROOT_DIR_BLOCK_NUM}
+    used_blocks = {BLOCK_NONE, ROOT_DIR_BLOCK_NUM} | set(extra_dir_blocks)
     for p in plans:
         used_blocks.update(p["blocks"])
         if p["index_block"]:
@@ -401,7 +407,7 @@ def make_image(output_path, total_sectors, inode_count, verbose=True, files=()):
 
     # inode 表：0 号槽位是根目录 inode，其余全部清零空闲
     off = layout["inode_table_lba"] * SECTOR_SIZE
-    image[off:off + INODE_SIZE] = build_root_inode()
+    image[off:off + INODE_SIZE] = build_root_inode(extra_dir_blocks)
     for i in range(1, inode_count):
         pos = off + i * INODE_SIZE
         image[pos:pos + INODE_SIZE] = build_free_inode()
@@ -435,7 +441,9 @@ def make_image(output_path, total_sectors, inode_count, verbose=True, files=()):
                           p["index_block"], 0)
         o = inode_off + p["inode"] * INODE_SIZE
         image[o:o + INODE_SIZE] = ino
-        o = root_dir_block_lba * SECTOR_SIZE + (2 + k) * DIRENT_SIZE
+        slot = 2 + k                                          # DAY76: 槽位 -> (第几个目录块, 块内位置)
+        dblk = ([ROOT_DIR_BLOCK_NUM] + extra_dir_blocks)[slot // DIRENTS_PER_BLOCK]
+        o = (layout["data_area_lba"] + dblk * SECTORS_PER_BLOCK) * SECTOR_SIZE + (slot % DIRENTS_PER_BLOCK) * DIRENT_SIZE
         image[o:o + DIRENT_SIZE] = build_dirent(p["inode"], p["name"])
 
     with open(output_path, "wb") as f:
@@ -526,11 +534,13 @@ def verify(output_path, inode_count, layout, verbose=True):
     r_direct = unpacked[3:11]
     r_ind1, r_ind2 = unpacked[11], unpacked[12]
     assert r_type == LMFS_TYPE_DIR, "根目录 inode 的 type 不是目录"
-    assert r_size == BLOCK_SIZE, "根目录 file_size 应该是 1 个块"
+    # DAY76: 文件多时根目录有多个目录块：file_size = 块数 * BLOCK_SIZE，direct[0] 之后是连续的“额外目录块”
+    n_dir_blocks = sum(1 for d in r_direct if d != BLOCK_NONE)
+    assert r_size == BLOCK_SIZE * n_dir_blocks, "根目录 file_size 应该是 %d 个块" % n_dir_blocks
     assert r_direct[0] == ROOT_DIR_BLOCK_NUM, \
         "根目录 direct[0] 应该指向块号 %d" % ROOT_DIR_BLOCK_NUM
-    assert all(d == BLOCK_NONE for d in r_direct[1:]), \
-        "根目录除 direct[0] 外的直接块指针应该全部是 BLOCK_NONE"
+    assert all(d == BLOCK_NONE for d in r_direct[n_dir_blocks:]), \
+        "根目录的直接块指针应该是前面连续有效、后面全部 BLOCK_NONE"
     assert r_ind1 == 0 and r_ind2 == 0
 
     root_dir_block_lba = (layout["data_area_lba"]

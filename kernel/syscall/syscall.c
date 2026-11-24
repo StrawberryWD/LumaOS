@@ -12,6 +12,9 @@
 #include "../mm/aspace.h"
 #include "fd.h"
 #include "fsops.h"
+#include "../exec/elf_exec.h"
+#include "../exec/elf.h"
+#include "../shell/shell.h"
 #include "../arch/isr_context.h"
 #include "../mm/paging.h"
 
@@ -176,6 +179,52 @@ static int32_t sys_stat(uint32_t path, uint32_t out, uint32_t a3, uint32_t a4, u
 static int32_t sys_getcwd(uint32_t buf, uint32_t size, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a3; (void)a4; (void)a5; (void)a6; return fsops_getcwd(buf, size); }
 
+
+/* DAY76: SYS_EXECVE。先把路径和 argv 从用户内存复制进内核静态缓冲（换掉地址空间后用户内存就没了）。 */
+static int32_t sys_execve(uint32_t upath, uint32_t uargv, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{
+    (void)a3; (void)a4; (void)a5; (void)a6;
+    static char raw[160], full[160], sbuf[ELF_ARGS_MAX_BYTES + 4];
+    static const char *av[ELF_ARGS_MAX_COUNT + 1];
+    uint32_t i;
+    for (i = 0; i < sizeof(raw); i++) {
+        if (!luma_user_range_ok(upath + i, 1)) return -LUMA_EFAULT;
+        raw[i] = *(const volatile char *)(uintptr_t)(upath + i);
+        if (raw[i] == 0) break;
+    }
+    if (i == sizeof(raw)) return -LUMA_ENAMETOOLONG;
+    if (i == 0) return -LUMA_ENOENT;
+    int argc = 0; uint32_t used = 0;
+    if (uargv) {
+        for (;; argc++) {
+            if (argc > (int)ELF_ARGS_MAX_COUNT) return -LUMA_E2BIG;
+            if (!luma_user_range_ok(uargv + 4u * (uint32_t)argc, 4)) return -LUMA_EFAULT;
+            uint32_t p = *(const volatile uint32_t *)(uintptr_t)(uargv + 4u * (uint32_t)argc);
+            if (p == 0) break;
+            if (argc >= (int)ELF_ARGS_MAX_COUNT) return -LUMA_E2BIG;
+            av[argc] = sbuf + used;
+            for (;; used++) {
+                if (used >= ELF_ARGS_MAX_BYTES) return -LUMA_E2BIG;
+                if (!luma_user_range_ok(p, 1)) return -LUMA_EFAULT;
+                char c = *(const volatile char *)(uintptr_t)p++;
+                sbuf[used] = c;
+                if (c == 0) { used++; break; }
+            }
+        }
+    }
+    if (shell_resolve_path(raw, full, sizeof(full)) != 0) return -LUMA_ENOENT;
+    int rc = elf_execve(full, argc, av);                 /* 成功不返回 */
+    switch (rc) {
+    case ELF_ERR_OPEN:      return -LUMA_ENOENT;
+    case ELF_ERR_IS_DIR:    return -LUMA_EISDIR;
+    case ELF_ERR_IO:        return -LUMA_EIO;
+    case ELF_ERR_ARGS:      return -LUMA_E2BIG;
+    case ELF_ERR_NO_MEMORY:
+    case ELF_ERR_NO_STACK:  return -LUMA_ENOMEM;
+    default:                return -LUMA_ENOEXEC;
+    }
+}
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -192,6 +241,7 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_READDIR]= sys_readdir,     /* DAY75 */
     [SYS_STAT]   = sys_stat,
     [SYS_GETCWD] = sys_getcwd,
+    [SYS_EXECVE] = sys_execve,      /* DAY76 */
 };
 
 static syscall_stats_t g_stats;

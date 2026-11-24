@@ -60,4 +60,7 @@ int elf_exec(const char *path, terminal_t *out, elf_exec_result_t *res);
 int elf_exec_args(const char *path, terminal_t *out, int argc, const char *const *argv,
                   elf_exec_result_t *res);
 
+/* DAY76: 用新程序替换当前正在运行的程序。成功不返回；失败返回 ELF_ERR_*，当前程序原样继续。 */
+int elf_execve(const char *path, int argc, const char *const *argv);
+
 #endif /* LUMA_ELF_EXEC_H */

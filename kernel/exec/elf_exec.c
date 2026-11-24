@@ -16,7 +16,43 @@
 #include "../mm/aspace.h"
 #include "../syscall/syscall.h"
 #include "../syscall/fd.h"
+#include "elf_run.h"
 #include "urt.h"
+
+/* DAY76: 建地址空间（映射段 + 堆 + 栈 + 运行时页）。成功 0；失败 ELF_ERR_NO_MEMORY（as 已销毁）。 */
+static int build_space(const elf_image_t *img, aspace_t *as)
+{
+    int ok = 1;
+    uint32_t seg_end = 0;
+    if (aspace_create(as) != 0)
+        return ELF_ERR_NO_MEMORY;
+    for (uint32_t i = 0; ok && i < img->ehdr.e_phnum; i++) {
+        const elf32_phdr_t *p = &img->phdr[i];
+        if (p->p_type != PT_LOAD || p->p_memsz == 0)
+            continue;
+        ok = aspace_map_range(as, p->p_vaddr, p->p_vaddr + p->p_memsz) == 0;
+        if (p->p_vaddr + p->p_memsz > seg_end)
+            seg_end = p->p_vaddr + p->p_memsz;
+    }
+    {   /* DAY73: 堆区 [lo, hi) */
+        uint32_t lo = (seg_end + 0xFFFu) & ~0xFFFu, hi = lo + LUMA_HEAP_MAX;
+        uint32_t guard = ELF_USER_STACK_BASE - 0x1000u;
+        if (lo <= guard && hi > guard) hi = guard;
+        if (hi > ASPACE_USER_HI || hi < lo) hi = ASPACE_USER_HI;
+        if (lo >= ASPACE_USER_HI || lo < ASPACE_USER_LO) lo = hi = 0;
+        else if (lo > guard && lo < ELF_USER_STACK_TOP + 0x1000u) lo = hi = 0;
+        aspace_set_heap(as, lo, hi);
+    }
+    if (ok)
+        ok = aspace_map_range(as, ELF_USER_STACK_BASE, ELF_USER_STACK_TOP) == 0;
+    if (ok)
+        ok = urt_install(as) == 0;
+    if (!ok) {
+        aspace_destroy(as);
+        return ELF_ERR_NO_MEMORY;
+    }
+    return 0;
+}
 
 /* DAY54: 程序在自己的地址空间里运行——
  *     load(验证) -> 建地址空间 -> 映射段+栈 -> 切 CR3 -> 装入段 -> 运行 -> 切回内核 CR3 -> 销毁
@@ -44,38 +80,9 @@ int elf_exec_args_hook(const char *path, terminal_t *out, int argc, const char *
     }
     res->entry = img.ehdr.e_entry;
 
-    /* ---- Day 54: 建地址空间，映射每个 PT_LOAD 段和用户栈 ---- */
+    /* ---- Day 54: 建地址空间，映射每个 PT_LOAD 段和用户栈（DAY76: 抽成 build_space） ---- */
     static aspace_t as;
-    if (aspace_create(&as) != 0) {
-        res->stage = ELF_STAGE_MAP;
-        res->rc = ELF_ERR_NO_MEMORY;
-        return res->rc;
-    }
-    int ok = 1;
-    uint32_t seg_end = 0;                                /* DAY73: 最高段末尾 -> 堆起点 */
-    for (uint32_t i = 0; ok && i < img.ehdr.e_phnum; i++) {
-        const elf32_phdr_t *p = &img.phdr[i];
-        if (p->p_type != PT_LOAD || p->p_memsz == 0)
-            continue;
-        ok = aspace_map_range(&as, p->p_vaddr, p->p_vaddr + p->p_memsz) == 0;
-        if (p->p_vaddr + p->p_memsz > seg_end)
-            seg_end = p->p_vaddr + p->p_memsz;
-    }
-    {   /* DAY73: 堆区 [lo, hi)：lo = 段末尾上取整；hi = lo + 8MB，但不越过栈护栏页（程序放在栈下方时）和用户区上界 */
-        uint32_t lo = (seg_end + 0xFFFu) & ~0xFFFu, hi = lo + LUMA_HEAP_MAX;
-        uint32_t guard = ELF_USER_STACK_BASE - 0x1000u;
-        if (lo <= guard && hi > guard) hi = guard;
-        if (hi > ASPACE_USER_HI || hi < lo) hi = ASPACE_USER_HI;
-        if (lo >= ASPACE_USER_HI || lo < ASPACE_USER_LO) lo = hi = 0;
-        else if (lo > guard && lo < ELF_USER_STACK_TOP + 0x1000u) lo = hi = 0;     /* 段占据栈区：没有堆 */
-        aspace_set_heap(&as, lo, hi);
-    }
-    if (ok)
-        ok = aspace_map_range(&as, ELF_USER_STACK_BASE, ELF_USER_STACK_TOP) == 0;
-    if (ok)
-        ok = urt_install(&as) == 0;                     /* DAY55: 栈上方的运行时页（api 表 + stub） */
-    if (!ok) {
-        aspace_destroy(&as);
+    if (build_space(&img, &as) != 0) {
         res->stage = ELF_STAGE_MAP;
         res->rc = ELF_ERR_NO_MEMORY;
         return res->rc;
@@ -126,4 +133,39 @@ int elf_exec_args(const char *path, terminal_t *out, int argc, const char *const
 int elf_exec(const char *path, terminal_t *out, elf_exec_result_t *res)
 {
     return elf_exec_args(path, out, 0, (const char *const *)0, res);
+}
+
+/* DAY76: execve。调用者是正在 Ring 3 运行的程序（经 SYS_EXECVE 进来），它的地址空间就是 aspace_current()。
+ * 步骤：1) 验证新文件和参数（旧程序毫发无损，失败只返回错误）；2) 给新程序建一个新地址空间并装入；
+ *       3) 不可回头：销毁旧地址空间，把新的放进“同一个 aspace_t 对象”（外层 elf_exec 之后销毁的就是它）；
+ *       4) 切到新程序入口。成功时不返回。fd 表全部关闭（和 elf_exec 一样每个程序一张干净的表）。 */
+int elf_execve(const char *path, int argc, const char *const *argv)
+{
+    static elf_image_t img2;
+    static aspace_t nas;
+    aspace_t *cur = aspace_current();
+    if (cur == (aspace_t *)0)
+        return ELF_ERR_NO_ASPACE;
+    int rc = elf_load(path, &img2);
+    if (rc != ELF_OK)
+        return rc;
+    rc = elf_args_validate(argc, argv);
+    if (rc != ELF_OK)
+        return rc;
+    if (build_space(&img2, &nas) != 0)
+        return ELF_ERR_NO_MEMORY;
+    aspace_activate(&nas);                               /* 新空间里装段（旧的还在，只是不是当前） */
+    rc = elf_load_segments(path, &img2, (elf_load_stats_t *)0);
+    if (rc != ELF_OK) {
+        aspace_activate(cur);                            /* 回到旧程序 */
+        aspace_destroy(&nas);
+        return rc;
+    }
+    /* ---- 不可回头 ---- */
+    aspace_destroy(cur);                                 /* 旧空间此刻不是当前，可以销毁 */
+    *cur = nas;
+    aspace_activate(cur);
+    fd_reset();
+    elf_reenter_user(&img2, argc, argv);                 /* 不返回 */
+    return 0;
 }

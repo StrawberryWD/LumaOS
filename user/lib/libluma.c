@@ -28,6 +28,8 @@ int lseek(int fd, int off, int whence)            { return ret_errno(luma_syscal
 int readdir(const char *path, unsigned index, dirent_t *out)
 { return ret_errno(luma_syscall3(SYS_READDIR, (int)path, (int)index, (int)out)); }
 int stat(const char *path, stat_t *st)            { return ret_errno(luma_syscall3(SYS_STAT, (int)path, (int)st, 0)); }
+int execv(const char *path, char *const argv[])
+{ return ret_errno(luma_syscall3(SYS_EXECVE, (int)path, (int)argv, 0)); }
 char *getcwd(char *buf, size_t size)
 {
     int r = luma_syscall3(SYS_GETCWD, (int)buf, (int)size, 0);

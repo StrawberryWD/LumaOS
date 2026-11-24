@@ -51,6 +51,7 @@ typedef __builtin_va_list va_list;
 #define SYS_READDIR  11         /* DAY75 */
 #define SYS_STAT     12
 #define SYS_GETCWD   13
+#define SYS_EXECVE   14         /* DAY76 */
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -225,6 +226,10 @@ typedef struct { unsigned size; unsigned type; char name[32]; } dirent_t;
 typedef struct { unsigned size; unsigned type; } stat_t;
 int   readdir(const char *path, unsigned index, dirent_t *out);
 int   stat(const char *path, stat_t *st);
+/* DAY76: execv(path, argv)：用另一个 .sw 替换当前程序。成功不返回（新程序的退出码成为整个 run 的退出码，
+ * 打开的文件全部关闭，堆/栈全部是新的）；失败返回 -1 + errno（ENOENT EISDIR ENOEXEC E2BIG ENOMEM EFAULT ...），当前程序继续。
+ * argv 以 NULL 结尾（argv 本身可以是 NULL，相当于没有参数）。 */
+int   execv(const char *path, char *const argv[]);
 char *getcwd(char *buf, size_t size);
 void  qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *));
 int   atoi(const char *s);

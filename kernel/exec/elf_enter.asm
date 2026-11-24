@@ -72,6 +72,7 @@ BITS 32
 section .text
 global elf_enter
 global elf_sys_exit
+global elf_reenter
 global elf_running
 global elf_ret_stub_va
 extern kernel_tss
@@ -135,6 +136,45 @@ elf_enter:
 ; DAY55: via 由 syscall.c 根据调用者 eip 判断（0 = 入口 ret 的 stub，1 = api->exit 的 stub，2 = 程序自己 int 0x80）。
 ; 只能在 elf_running == 1 时调用（syscall.c 检查）：否则 elf_saved_esp 是旧值，跳回去等于跳进垃圾。
 ; 此刻在内核栈（TSS.esp0）上，叠着 int 0x80 的中断帧；出口一步把 esp 换回 elf_enter 存的位置，整叠丢掉。
+; DAY76: elf_reenter(entry, api, frame_top, argc, argv) —— execve 的“跳进去”。
+; 和 elf_enter 的后半段一样，但不保存任何东西：elf_saved_esp 里仍是最初 elf_enter 记下的回家路，
+; 所以新程序最终 exit 时回到的还是当初调用 elf_enter 的那个人（shell 的 run）。当前内核栈上
+; （int 0x80 的中断帧、syscall 处理函数的局部变量）整个被丢弃：esp 直接换成 elf_saved_esp 再摆 iret 帧。
+elf_reenter:
+    mov  eax, [esp + 4]         ; entry
+    mov  edx, [esp + 8]         ; api
+    mov  ecx, [esp + 12]        ; frame_top
+    mov  ebx, [esp + 16]        ; argc
+    mov  esi, [esp + 20]        ; argv
+    mov  dword [elf_exit_via], 0
+    mov  edi, [elf_ret_stub_va]
+    mov  esp, ecx
+    sub  esp, 4
+    push esi
+    push ebx
+    push edx
+    push edi
+    mov  edi, esp
+    mov  esp, [elf_saved_esp]
+    push dword 0x3B
+    push edi
+    push dword 0x202
+    push dword 0x23
+    push eax
+    mov  dx, 0x3B
+    mov  ds, dx
+    mov  es, dx
+    mov  fs, dx
+    mov  gs, dx
+    xor  eax, eax
+    xor  ebx, ebx
+    xor  ecx, ecx
+    xor  edx, edx
+    xor  esi, esi
+    xor  edi, edi
+    xor  ebp, ebp
+    iretd
+
 elf_sys_exit:
     mov  eax, [esp + 4]         ; code
     mov  ecx, [esp + 8]         ; via

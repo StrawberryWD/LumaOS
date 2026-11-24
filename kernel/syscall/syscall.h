@@ -235,6 +235,17 @@
 #define SYS_STAT    12
 #define SYS_GETCWD  13
 
+/* ---- DAY76: execve ----
+ *  14 SYS_EXECVE   int execv(const char *path, char *const argv[])                 ebx=path, ecx=argv
+ *      用 path 指向的 .sw 程序替换当前程序（同一个“进程”：同一个终端、同一个退出出口）。
+ *      argv 是以 NULL 结尾的指针数组（最多 32 个、字符串合计 2048 字节）；ecx==0 等价于 argc=0。
+ *      成功：不返回——新程序从入口开始运行，它的退出码就是整个 run 的退出码。旧程序的地址空间、堆、栈全部销毁，
+ *            打开的文件全部关闭（今天没有“跨 exec 保留 fd”）。
+ *      失败：返回 -errno，当前程序原样继续（失败发生在“不可回头”之前）：
+ *            -EFAULT 坏指针；-ENAMETOOLONG；-ENOENT 找不到；-EISDIR；-ENOEXEC 不是合法 ELF；
+ *            -E2BIG 参数太多/太长；-ENOMEM 页框不够；-EIO 读盘失败。 */
+#define SYS_EXECVE  14
+
 #define LUMA_DT_FILE 1
 #define LUMA_DT_DIR  2
 typedef struct { uint32_t size; uint32_t type; char name[32]; } luma_dirent_t;   /* name 与 vfs_node_t.name 一样长 */

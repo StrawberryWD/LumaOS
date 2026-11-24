@@ -120,6 +120,10 @@ int elf_run_args(elf_image_t *img, terminal_t *out, int argc, const char *const 
  * to_stderr != 0 时用错误色（红）。NUL 字节被丢弃。buf 必须已经由调用者复制到内核内存。
  * 返回 0；当前没有程序在运行（g_run_out 为空）返回 -1。输出同样计入 elf_run_info_t 的
  * out_total/out_last，所以 `run` 的“补换行”对系统调用输出同样有效。 */
+/* DAY76: execve 用。 */
+int  elf_args_validate(int argc, const char *const *argv);
+void elf_reenter_user(const elf_image_t *img, int argc, const char *const *argv);
+
 int elf_run_write(const char *buf, uint32_t n, int to_stderr);
 
 #endif /* LUMA_ELF_RUN_H */

@@ -12,6 +12,7 @@
 
 /* 汇编跳板：存现场 -> 切到用户栈 -> 跳到 entry(api) -> 统一出口 -> 恢复现场，
  * 返回程序的退出码。elf_api_exit 是给程序的 api->exit；elf_exit_via 记录走了哪条路。 */
+extern void     elf_reenter(uint32_t entry, const void *api, uint32_t frame_top, int argc, char **argv);   /* DAY76 */
 extern int      elf_enter(uint32_t entry, const void *api, uint32_t frame_top,
                           int argc, char **argv);
 extern uint32_t elf_exit_via;      /* 0 = ret, 1 = api->exit, 2 = SYS_EXIT (Day 52) */
@@ -151,6 +152,38 @@ static int args_install(int argc, const char *const *argv,
     *frame_top = sp & ~15u;
     ((volatile uint32_t *)(uintptr_t)(*frame_top - 4))[0] = 0;
     return ELF_OK;
+}
+
+
+/* ---- DAY76: execve 的两半 ----
+ * elf_args_validate：只检查不写（execve 必须在“不可回头”之前就知道参数能不能用）。 */
+int elf_args_validate(int argc, const char *const *argv)
+{
+    if (argc < 0 || (uint32_t)argc > ELF_ARGS_MAX_COUNT) return ELF_ERR_ARGS;
+    if (argc > 0 && argv == (const char *const *)0) return ELF_ERR_NULL;
+    uint32_t total = 0;
+    for (int i = 0; i < argc; i++) {
+        if (argv[i] == (const char *)0) return ELF_ERR_ARGS;
+        uint32_t n = (uint32_t)strlen(argv[i]) + 1;
+        if (n > ELF_ARGS_MAX_BYTES || total > ELF_ARGS_MAX_BYTES - n) return ELF_ERR_ARGS;
+        total += n;
+    }
+    return ELF_OK;
+}
+
+/* elf_reenter_user：当前地址空间已经是新程序的（段已装入）。准备栈和参数，然后直接 iret 进新入口。
+ * 不返回；只有栈/参数出问题（此时旧程序已经没了）才杀掉进程：退出码 127，via = 1。 */
+void elf_reenter_user(const elf_image_t *img, int argc, const char *const *argv)
+{
+    uint32_t api_va = urt_api_va();
+    uint32_t frame_top = ELF_USER_STACK_TOP, argv_addr = 0;
+    if (api_va == 0 || !stack_prepare() || args_install(argc, argv, &frame_top, &argv_addr) != ELF_OK)
+        elf_sys_exit(127, 1);
+    g_out_total = 0;
+    g_out_last = 0;
+    elf_ret_stub_va = urt_ret_stub_va();
+    elf_reenter(img->ehdr.e_entry, (const void *)(uintptr_t)api_va, frame_top, argc, (char **)(uintptr_t)argv_addr);
+    for (;;) ;
 }
 
 int elf_run_args(elf_image_t *img, terminal_t *out, int argc, const char *const *argv,
