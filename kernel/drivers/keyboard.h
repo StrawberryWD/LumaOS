@@ -69,6 +69,7 @@ unsigned char keyboard_read(void);       /* non-blocking, 0 = empty */
 int           keyboard_available(void);
 void          keyboard_clear_buffer(void);
 void          keyboard_irq_handler(void);
+int           keyboard_take_ctrl_c(void);   /* 1 once if Ctrl+C was pressed while a program runs (clears the flag) */
 
 /* Modifier state */
 int keyboard_shift_held(void);

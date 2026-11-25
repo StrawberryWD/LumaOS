@@ -47,6 +47,18 @@ void elf_fault_kill(const isr_context_t *ctx, uint32_t vector)
     elf_sys_exit((int)(vector == ELF_FAULT_CTRL_C ? 130 : 128 + vector), (int)ELF_VIA_KILLED);   /* 不返回 */
 }
 
+/* DAY77a: 程序在 read(0) 里等输入时按了 Ctrl+C（IRQ 处理函数此时被打断的是内核态，不会杀它）：
+ * 由 stdin 的等待循环调用，效果和 Ctrl+C 打断运行中的程序一样。不返回。 */
+void elf_kill_ctrl_c(void)
+{
+    elf_fault_last.vector = ELF_FAULT_CTRL_C;
+    elf_fault_last.err    = 0;
+    elf_fault_last.addr   = 0;
+    elf_fault_last.eip    = 0;
+    proc_on_exit(130, (int)ELF_VIA_KILLED);
+    elf_sys_exit(130, (int)ELF_VIA_KILLED);
+}
+
 /* ---- 报告文字 ---- */
 static char *put_str(char *p, const char *s) { while (*s) *p++ = *s++; return p; }
 static char *put_hex(char *p, uint32_t v)

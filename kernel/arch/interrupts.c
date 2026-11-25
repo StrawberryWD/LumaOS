@@ -80,7 +80,7 @@ void irq_handler(isr_context_t *ctx)
     case 1:  keyboard_irq_handler();
              /* DAY56: Ctrl+C 且被打断的是 Ring 3 的用户程序 -> 终止它。先给 PIC 发 EOI，否则键盘
               * 中断不会再来（elf_fault_kill 不返回，下面的 pic_eoi 走不到）。 */
-             if (keyboard_take_ctrl_c() && elf_fault_from_user(ctx)) {
+             if (elf_fault_from_user(ctx) && keyboard_take_ctrl_c()) {      /* DAY77a: 被打断的是内核（例如在 read(0) 里等输入）时保留标志，由等待循环处理 */
                  pic_eoi((uint8_t)irq);
                  elf_fault_kill(ctx, ELF_FAULT_CTRL_C_VEC);
              }

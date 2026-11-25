@@ -12,6 +12,7 @@
 #include "../mm/aspace.h"
 #include "fd.h"
 #include "fsops.h"
+#include "stdin.h"
 #include "../exec/elf_exec.h"
 #include "../proc/proc.h"
 #include "../exec/elf.h"
@@ -238,6 +239,9 @@ static int32_t sys_getpid(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, ui
 static int32_t sys_yield(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; proc_yield(); return 0; }
 
+static int32_t sys_termmode(uint32_t m, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return stdin_termmode(m); }
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -259,6 +263,7 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_WAIT]   = sys_wait,
     [SYS_GETPID] = sys_getpid,
     [SYS_YIELD]  = sys_yield,
+    [SYS_TERMMODE] = sys_termmode,  /* DAY77a */
 };
 
 static syscall_stats_t g_stats;

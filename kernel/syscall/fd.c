@@ -1,6 +1,7 @@
 /* kernel/syscall/fd.c - DAY74: 文件描述符表和 open/read/close/lseek 的实现。设计见 fd.h。 */
 #define LUMA_KERNEL_SIDE 1
 #include "fd.h"
+#include "stdin.h"
 #include "syscall.h"
 #include "../core/errno.h"
 #include "../fs/vfs/vfs.h"
@@ -111,8 +112,10 @@ int32_t fd_open(const char *upath, uint32_t flags)
 
 int32_t fd_read(int32_t fd, uint32_t ubuf, uint32_t len)
 {
-    if (fd >= 0 && fd < LUMA_FD_FIRST)
-        return -LUMA_EBADF;                          /* stdin 今天没有数据；1/2 是只写 */
+    if (fd == 0)
+        return stdin_read(ubuf, len);                /* DAY77a: 键盘（stdin.c） */
+    if (fd > 0 && fd < LUMA_FD_FIRST)
+        return -LUMA_EBADF;                          /* 1/2 是只写 */
     fd_slot_t *s = slot_of(fd);
     if (!s)
         return -LUMA_EBADF;

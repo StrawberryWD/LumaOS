@@ -258,6 +258,11 @@
 #define SYS_GETPID  17
 #define SYS_YIELD   18
 
+/* ---- DAY77a: 标准输入 ----
+ *  read(0, buf, n) 读键盘（SYS_READ 的 fd 0，见 stdin.h：行编辑/原始两种模式）。
+ *  19 SYS_TERMMODE  int termmode(int mode)   0=COOKED（默认）1=RAW 2=RAW_NB；返回旧模式，-EINVAL。每个程序开始时都是 COOKED。 */
+#define SYS_TERMMODE 19
+
 #define LUMA_DT_FILE 1
 #define LUMA_DT_DIR  2
 typedef struct { uint32_t size; uint32_t type; char name[32]; } luma_dirent_t;   /* name 与 vfs_node_t.name 一样长 */

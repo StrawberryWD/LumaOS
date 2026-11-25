@@ -93,7 +93,8 @@ int fgetc(FILE *f)
     if (f->unget >= 0) { int c = f->unget; f->unget = -1; return c; }
     if (!readable(f)) return EOF;
     if (f->bpos >= f->blen) {
-        if (f->flags & F_EOF) return EOF;
+        if ((f->flags & F_EOF) && f != stdin) return EOF;     /* DAY77a: 键盘的 EOF（Ctrl+D）不是永久的 */
+        f->flags &= ~F_EOF;
         if (fill(f) < 0) return EOF;
     }
     return f->buf[f->bpos++];

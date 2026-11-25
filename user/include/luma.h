@@ -56,6 +56,7 @@ typedef __builtin_va_list va_list;
 #define SYS_WAIT     16
 #define SYS_GETPID   17
 #define SYS_YIELD    18
+#define SYS_TERMMODE 19         /* DAY77a */
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -244,6 +245,19 @@ int   fork(void);
 int   wait(int *status);
 int   getpid(void);
 int   yield(void);
+/* DAY77a: 标准输入。read(0, ...) / getchar() / fgets(s, n, stdin) 读键盘。
+ * 默认 COOKED（行缓冲）：内核回显、Backspace/Ctrl+U 编辑，Enter 结束一行（带 '\n'）；Ctrl+D 在行首 = EOF（getchar 返回 EOF，
+ *   之后还可以继续读）。Ctrl+C 随时终止程序（退出码 130）。
+ * termmode(TERM_RAW)：无回显、无编辑，read 阻塞到有按键、一次返回键盘缓冲里现有的全部按键，每键 1 字节（特殊键是 0x80 以上的 KEY_*）。
+ * termmode(TERM_RAW_NB)：同上但没有按键时立刻返回 -1 + EAGAIN。返回旧模式；每个程序开始时都是 TERM_COOKED。 */
+#define TERM_COOKED 0
+#define TERM_RAW    1
+#define TERM_RAW_NB 2
+#define KEY_UP      0x80
+#define KEY_DOWN    0x81
+#define KEY_LEFT    0x82
+#define KEY_RIGHT   0x83
+int   termmode(int mode);
 #define WIFEXITED(s)    (((s) & 0x7F) == 0)
 #define WEXITSTATUS(s)  (((s) >> 8) & 0xFF)
 #define WIFSIGNALED(s)  (((s) & 0x7F) != 0)
