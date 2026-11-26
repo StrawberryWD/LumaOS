@@ -110,3 +110,56 @@ int32_t fsops_getcwd(uint32_t ubuf, uint32_t size)
     memcpy((void *)(uintptr_t)ubuf, p, n + 1);
     return (int32_t)n;
 }
+
+/* ---- DAY77b ---- */
+int32_t fsops_unlink(const char *upath)
+{
+    char full[LUMA_PATH_MAX];
+    int r = resolve(upath, full, sizeof(full));
+    if (r < 0) return r;
+    return vfs_ops_delete(full);
+}
+
+int32_t fsops_mkdir(const char *upath)
+{
+    char full[LUMA_PATH_MAX];
+    int r = resolve(upath, full, sizeof(full));
+    if (r < 0) return r;
+    return vfs_ops_mkdir(full);
+}
+
+#define XFER_MAX (256u * 1024u)
+static uint8_t g_xfer[XFER_MAX];                               /* rename 的中转缓冲（.bss） */
+
+int32_t fsops_rename(const char *uold, const char *unew)
+{
+    char a[LUMA_PATH_MAX], b[LUMA_PATH_MAX];
+    int r = resolve(uold, a, sizeof(a));
+    if (r < 0) return r;
+    r = resolve(unew, b, sizeof(b));
+    if (r < 0) return r;
+    uint32_t size = 0; int isdir = 0;
+    r = vfs_ops_stat(a, &size, &isdir);
+    if (r < 0) return r;
+    if (isdir) return -LUMA_EISDIR;                            /* 目录改名：文件系统层还没有 */
+    if (strcmp(a, b) == 0) return 0;
+    r = vfs_ops_writable(a); if (r < 0) return r;
+    r = vfs_ops_writable(b); if (r < 0) return r;
+    if (size > XFER_MAX) return -LUMA_EFBIG;
+    uint32_t dsize = 0; int disdir = 0, existed = 0;
+    int sr = vfs_ops_stat(b, &dsize, &disdir);
+    if (sr == 0) { if (disdir) return -LUMA_EISDIR; existed = 1; }
+    else if (sr != -LUMA_ENOENT) return sr;
+    int n = vfs_ops_read(a, g_xfer, XFER_MAX);
+    if (n < 0) return n;
+    if (!existed) {
+        r = vfs_ops_create(b);
+        if (r < 0) return r;
+    }
+    int w = vfs_ops_write(b, g_xfer, (uint32_t)n);
+    if (w < 0) {
+        if (!existed) vfs_ops_delete(b);                       /* 别留下半成品 */
+        return w;
+    }
+    return vfs_ops_delete(a);
+}

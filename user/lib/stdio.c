@@ -23,7 +23,8 @@
 
 #define F_EOF    1u
 #define F_ERR    2u
-#define F_WRITE  4u            /* 只写流（stdout/stderr）；读它 -> EBADF */
+#define F_WRITE  4u            /* 只写流（stdout/stderr、"w"/"a" 打开的文件）；读它 -> EBADF（名字沿用 Day 74，意思是“不能读”）*/
+#define F_NOWRITE 16u          /* DAY77b：只读流（stdin、"r" 打开的文件）；写它 -> EBADF */
 #define F_STATIC 8u            /* stdin/stdout/stderr：不可 fclose */
 #define BUFSZ    512
 
@@ -35,7 +36,7 @@ struct luma_file {
     unsigned char buf[BUFSZ];
 };
 
-static struct luma_file f_in  = { 0, F_STATIC,           0, 0, -1, {0} };
+static struct luma_file f_in  = { 0, F_STATIC | F_NOWRITE, 0, 0, -1, {0} };
 static struct luma_file f_out = { 1, F_STATIC | F_WRITE, 0, 0, -1, {0} };
 static struct luma_file f_err = { 2, F_STATIC | F_WRITE, 0, 0, -1, {0} };
 FILE *stdin = &f_in, *stdout = &f_out, *stderr = &f_err;
@@ -46,20 +47,25 @@ extern int write_all(int fd, const char *s, size_t n);          /* libluma.c */
 FILE *fopen(const char *path, const char *mode)
 {
     if (!path || !mode || !mode[0]) { errno = EINVAL; return NULL; }
-    /* 只接受 "r" 加可选的 'b'/'t'（二进制/文本在 LumaOS 没有区别）。"w" "a" "+"：写文件还没有 -> ENOSYS。 */
-    if (mode[0] != 'r') {
-        errno = (mode[0] == 'w' || mode[0] == 'a') ? ENOSYS : EINVAL;
-        return NULL;
-    }
+    /* mode = ("r"|"w"|"a") 后面跟 '+'、'b'、't'、'x'（'x' 只配 "w"）任意顺序；b/t 在 LumaOS 没有区别 */
+    int plus = 0, excl = 0;
     for (const char *m = mode + 1; *m; m++) {
-        if (*m == '+') { errno = ENOSYS; return NULL; }
-        if (*m != 'b' && *m != 't') { errno = EINVAL; return NULL; }
+        if (*m == '+') plus = 1;
+        else if (*m == 'x' && mode[0] == 'w') excl = 1;
+        else if (*m != 'b' && *m != 't') { errno = EINVAL; return NULL; }
+    }
+    int flags; unsigned fl = 0;
+    switch (mode[0]) {
+    case 'r': flags = plus ? O_RDWR : O_RDONLY;                                    if (!plus) fl = F_NOWRITE; break;
+    case 'w': flags = (plus ? O_RDWR : O_WRONLY) | O_CREAT | O_TRUNC | (excl ? O_EXCL : 0); if (!plus) fl = F_WRITE; break;
+    case 'a': flags = (plus ? O_RDWR : O_WRONLY) | O_CREAT | O_APPEND;             if (!plus) fl = F_WRITE; break;
+    default: errno = EINVAL; return NULL;
     }
     struct luma_file *f = malloc(sizeof *f);
     if (!f) return NULL;                                          /* malloc 已设 errno = ENOMEM */
-    int fd = open(path, O_RDONLY);
-    if (fd < 0) { free(f); return NULL; }                         /* errno 来自内核：ENOENT / EISDIR / EMFILE ... */
-    f->fd = fd; f->flags = 0; f->bpos = f->blen = 0; f->unget = -1;
+    int fd = open(path, flags);
+    if (fd < 0) { free(f); return NULL; }                         /* errno 来自内核：ENOENT / EISDIR / EMFILE / EROFS ... */
+    f->fd = fd; f->flags = fl; f->bpos = f->blen = 0; f->unget = -1;
     return f;
 }
 
@@ -67,7 +73,7 @@ int fclose(FILE *f)
 {
     if (!f) { errno = EBADF; return EOF; }
     if (f->flags & F_STATIC) { errno = EBADF; return EOF; }       /* 不让程序关掉标准流 */
-    int r = close(f->fd);
+    int r = close(f->fd);                                         /* 写打开的文件在这里写回，失败 -1 + errno */
     free(f);
     return r < 0 ? EOF : 0;
 }
@@ -157,7 +163,6 @@ char *fgets(char *s, int n, FILE *f)
 /* ---- 定位 ---- */
 long ftell(FILE *f)
 {
-    if (f->flags & F_WRITE) { errno = EBADF; return -1; }
     int pos = lseek(f->fd, 0, SEEK_CUR);
     if (pos < 0) return -1;
     return (long)pos - (f->blen - f->bpos) - (f->unget >= 0 ? 1 : 0);
@@ -165,7 +170,6 @@ long ftell(FILE *f)
 
 int fseek(FILE *f, long off, int whence)
 {
-    if (f->flags & F_WRITE) { errno = EBADF; return -1; }
     if (whence == SEEK_CUR)
         off -= (f->blen - f->bpos) + (f->unget >= 0 ? 1 : 0);     /* 内核偏移比逻辑位置靠前 */
     if (lseek(f->fd, (int)off, whence) < 0) return -1;
@@ -179,12 +183,20 @@ int  feof(FILE *f)      { return (f->flags & F_EOF) != 0; }
 int  ferror(FILE *f)    { return (f->flags & F_ERR) != 0; }
 void clearerr(FILE *f)  { f->flags &= ~(F_EOF | F_ERR); }
 int  fileno(FILE *f)    { return f->fd; }
-int  fflush(FILE *f)    { (void)f; return 0; }                    /* 没有写缓冲，没有可冲的 */
+int  fflush(FILE *f)                                              /* 写不缓冲（内核有写缓冲）：fflush 就是 fsync */
+{
+    if (!f || (f->flags & (F_STATIC | F_NOWRITE))) return 0;
+    return fsync(f->fd) < 0 ? EOF : 0;
+}
 
-/* ---- 写（只有 stdout/stderr 可写，不缓冲）---- */
+/* ---- 写（不缓冲：每次直接 write；落盘由内核的写缓冲在 close/fsync 时负责）---- */
 static int writable(FILE *f)
 {
-    if (!(f->flags & F_WRITE)) { errno = EBADF; f->flags |= F_ERR; return 0; }
+    if (f->flags & F_NOWRITE) { errno = EBADF; f->flags |= F_ERR; return 0; }
+    if (f->bpos < f->blen || f->unget >= 0) {                     /* 读写流：预读进缓冲的部分要还给内核偏移，写才落在逻辑位置 */
+        lseek(f->fd, -((f->blen - f->bpos) + (f->unget >= 0 ? 1 : 0)), SEEK_CUR);
+        f->bpos = f->blen = 0; f->unget = -1;
+    }
     return 1;
 }
 int fputc(int c, FILE *f)

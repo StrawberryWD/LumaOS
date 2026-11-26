@@ -47,6 +47,11 @@ ssize_t write(int fd, const void *buf, size_t len)
     return ret_errno(luma_syscall3(SYS_WRITE, fd, (int)buf, (int)len));
 }
 
+int unlink(const char *path)                      { return ret_errno(luma_syscall3(SYS_UNLINK, (int)path, 0, 0)); }
+int mkdir(const char *path)                       { return ret_errno(luma_syscall3(SYS_MKDIR, (int)path, 0, 0)); }
+int rename(const char *o, const char *n)          { return ret_errno(luma_syscall3(SYS_RENAME, (int)o, (int)n, 0)); }
+int fsync(int fd)                                 { return ret_errno(luma_syscall3(SYS_FSYNC, fd, 0, 0)); }
+
 /* 内核一次最多写 4096 字节并返回实际字节数（短写）；这里的辅助函数循环到写完或出错 */
 int write_all(int fd, const char *s, size_t n)
 {

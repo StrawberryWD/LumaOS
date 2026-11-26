@@ -85,6 +85,8 @@ extern int elf_run_write(const char *buf, uint32_t n, int to_stderr);   /* kerne
 static int32_t sys_write(uint32_t fd, uint32_t buf, uint32_t len, uint32_t a4, uint32_t a5, uint32_t a6)
 {
     (void)a4; (void)a5; (void)a6;
+    if (fd >= LUMA_FD_FIRST)
+        return fd_write((int32_t)fd, buf, len);      /* DAY77b：写文件 */
     if (fd != LUMA_STDOUT && fd != LUMA_STDERR)
         return -LUMA_EBADF;
     if (len == 0)
@@ -242,6 +244,15 @@ static int32_t sys_yield(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uin
 static int32_t sys_termmode(uint32_t m, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return stdin_termmode(m); }
 
+static int32_t sys_unlink(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_unlink((const char *)(uintptr_t)p); }
+static int32_t sys_mkdir(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_mkdir((const char *)(uintptr_t)p); }
+static int32_t sys_rename(uint32_t o, uint32_t n, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a3; (void)a4; (void)a5; (void)a6; return fsops_rename((const char *)(uintptr_t)o, (const char *)(uintptr_t)n); }
+static int32_t sys_fsync(uint32_t fd, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fd_fsync((int32_t)fd); }
+
 /* 调用表：下标 = 调用号；NULL = 没有这个调用（返回 -ENOSYS）。
  * SYS_EXIT / SYS_WRITE 的号码今天就占住了（ABI 已定），实现留给 Day 52 / Day 51。 */
 static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
@@ -264,6 +275,10 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_GETPID] = sys_getpid,
     [SYS_YIELD]  = sys_yield,
     [SYS_TERMMODE] = sys_termmode,  /* DAY77a */
+    [SYS_UNLINK] = sys_unlink,      /* DAY77b */
+    [SYS_MKDIR]  = sys_mkdir,
+    [SYS_RENAME] = sys_rename,
+    [SYS_FSYNC]  = sys_fsync,
 };
 
 static syscall_stats_t g_stats;

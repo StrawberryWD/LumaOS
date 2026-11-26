@@ -278,6 +278,14 @@ int vfs_ops_read(const char *path, void *buf, uint32_t cap)
     return (int)got;
 }
 
+int vfs_ops_writable(const char *path)
+{
+    filesystem_t *fs; const char *sub;
+    int r = vfs_ops_split(path, &fs, &sub);
+    if (r < 0) return r;
+    return is_iso(fs) ? -LUMA_EROFS : 0;
+}
+
 int vfs_ops_delete(const char *path)
 {
     filesystem_t *fs; const char *sub;

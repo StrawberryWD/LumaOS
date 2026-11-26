@@ -57,6 +57,10 @@ typedef __builtin_va_list va_list;
 #define SYS_GETPID   17
 #define SYS_YIELD    18
 #define SYS_TERMMODE 19         /* DAY77a */
+#define SYS_UNLINK   20         /* DAY77b */
+#define SYS_MKDIR    21
+#define SYS_RENAME   22
+#define SYS_FSYNC    23
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -178,7 +182,7 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
  *    close(fd)             -> 0 / -1
  *    lseek(fd, off, whence)-> 新偏移 / -1（SEEK_SET/CUR/END；越过文件尾合法）
  *  C 标准的流 FILE*：
- *    fopen(path, "r"|"rb"|"rt") -> FILE* 或 NULL + errno；其它模式（"w" "a" "+"）-> NULL + ENOSYS（写文件还没有）
+ *    fopen(path, mode)     -> FILE* 或 NULL + errno；mode = "r" "w" "a" 加可选 '+'（读写）、'b'/'t'（没有区别）、'x'（配 "w"：已存在则失败）
  *    fclose(f)             -> 0 / EOF；之后 f 不能再用。程序忘记 fclose，内核在程序结束时替它关 fd，但 FILE 的内存随进程消失
  *    fread(p, size, n, f)  -> 完整读到的“项”数（可能 < n：到文件尾或出错，用 feof/ferror 区分）
  *    fgetc/getc, ungetc(c, f)（只保证回退 1 个字符）, fgets(s, n, f)（读到换行或 n-1 个字符；什么都没读到返回 NULL）
@@ -189,6 +193,17 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
  *    perror(s)             -> 往 stderr 写 "s: <strerror(errno)>\n"
  *  FILE 带 512 字节的读缓冲（和 malloc 一起一次分配），读一个字符不再是一次系统调用。 */
 #define O_RDONLY  0
+/* DAY77b：写文件。open(path, O_WRONLY|O_RDWR 加 O_CREAT/O_EXCL/O_TRUNC/O_APPEND)；write(fd, buf, n)（fd >= 3，一次最多 64KB，短写由调用者循环）。
+ * 写入先进内核的写缓冲，close/fsync/程序退出时才写回文件系统——所以 close 可能失败（-1 + ENOSPC/EIO），要检查返回值；
+ * 同一个文件的别的 open 在 close 之前看不到新内容；文件最大 256KB（EFBIG）；同时最多 3 个写打开（第 4 个 EMFILE）；fork 的子进程不继承写打开的文件。
+ * unlink(path) 删文件（目录 EISDIR）；mkdir(path)（LMFS；FAT ENOSYS）；rename(old, new) 只支持文件，可跨卷，新路径已有文件则覆盖，非原子；
+ * fsync(fd) 立刻写回。光盘/只读卷上写 -> EROFS。 */
+#define O_WRONLY  1
+#define O_RDWR    2
+#define O_CREAT   0x40
+#define O_EXCL    0x80
+#define O_TRUNC   0x200
+#define O_APPEND  0x400
 #define SEEK_SET  0
 #define SEEK_CUR  1
 #define SEEK_END  2
@@ -196,6 +211,10 @@ extern FILE *stdin, *stdout, *stderr;
 int     open(const char *path, int flags);
 ssize_t read(int fd, void *buf, size_t len);
 int     close(int fd);
+int     unlink(const char *path);
+int     mkdir(const char *path);
+int     rename(const char *oldpath, const char *newpath);
+int     fsync(int fd);
 int     lseek(int fd, int off, int whence);
 FILE   *fopen(const char *path, const char *mode);
 int     fclose(FILE *f);

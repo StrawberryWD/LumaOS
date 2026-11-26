@@ -263,6 +263,18 @@
  *  19 SYS_TERMMODE  int termmode(int mode)   0=COOKED（默认）1=RAW 2=RAW_NB；返回旧模式，-EINVAL。每个程序开始时都是 COOKED。 */
 #define SYS_TERMMODE 19
 
+/* ---- DAY77b: 写文件 ----
+ *  open(path, O_WRONLY|O_RDWR [|O_CREAT|O_EXCL|O_TRUNC|O_APPEND])（SYS_OPEN 的 flags，见 fd.h）、write(fd>=3, ...)（SYS_WRITE）、
+ *  close 写回（SYS_CLOSE 可能返回 -ENOSPC/-EIO）、lseek 对写 fd 同样可用。
+ *  20 SYS_UNLINK   int unlink(const char *path)                      ebx=path。目录 -EISDIR，光盘 -EROFS
+ *  21 SYS_MKDIR    int mkdir(const char *path)                       ebx=path。已存在 -EEXIST，FAT -ENOSYS
+ *  22 SYS_RENAME   int rename(const char *old, const char *new)      ebx=old ecx=new。只支持文件，可跨卷；新路径已有文件则覆盖；非原子
+ *  23 SYS_FSYNC    int fsync(int fd)                                 把写缓冲写回文件系统 */
+#define SYS_UNLINK   20
+#define SYS_MKDIR    21
+#define SYS_RENAME   22
+#define SYS_FSYNC    23
+
 #define LUMA_DT_FILE 1
 #define LUMA_DT_DIR  2
 typedef struct { uint32_t size; uint32_t type; char name[32]; } luma_dirent_t;   /* name 与 vfs_node_t.name 一样长 */

@@ -32,8 +32,22 @@
 #define LUMA_PATH_MAX     160u     /* 含结尾 NUL；与 shell_resolve_path 的内部缓冲一致 */
 #define LUMA_READ_MAX     65536u   /* 一次 read 最多读这么多（短读，调用者循环）*/
 
-/* open 的 flags：今天只有只读 */
+/* open 的 flags（数值同 Linux）。DAY77b：写文件。
+ *   O_WRONLY / O_RDWR   写（或读写）。写入先进内核里的“写缓冲”，close / fsync / 程序退出时才一次写回文件系统
+ *                       （文件系统层今天只有“整个文件覆盖写”，没有局部写；见 fd.c 开头的设计说明）
+ *   O_CREAT             文件不存在就创建（父目录必须存在）   O_EXCL（配 O_CREAT）：已存在 -> -EEXIST
+ *   O_TRUNC             打开时清空                           O_APPEND：每次写都接在文件尾
+ *   写打开的文件最大 LUMA_WBUF_MAX（256 KB，正好是 LMFS 的单文件上限）；同时最多 LUMA_WFD_MAX 个写打开。 */
 #define LUMA_O_RDONLY     0
+#define LUMA_O_WRONLY     1
+#define LUMA_O_RDWR       2
+#define LUMA_O_CREAT      0x40
+#define LUMA_O_EXCL       0x80
+#define LUMA_O_TRUNC      0x200
+#define LUMA_O_APPEND     0x400
+#define LUMA_WBUF_MAX     (256u * 1024u)
+#define LUMA_WFD_MAX      3
+#define LUMA_WRITE_FD_MAX 65536u   /* 一次 write(fd) 最多写这么多（短写，调用者循环）*/
 /* lseek 的 whence */
 #define LUMA_SEEK_SET     0
 #define LUMA_SEEK_CUR     1
@@ -45,6 +59,9 @@ int32_t fd_open(const char *upath, uint32_t flags);  /* 用户指针；返回 fd
 int32_t fd_read(int32_t fd, uint32_t ubuf, uint32_t len);
 int32_t fd_close(int32_t fd);
 int32_t fd_lseek(int32_t fd, int32_t off, uint32_t whence);
+int32_t fd_write(int32_t fd, uint32_t ubuf, uint32_t len);   /* DAY77b：写文件 fd（>= 3）*/
+int32_t fd_fsync(int32_t fd);                                /* DAY77b：把写缓冲写回文件系统 */
+void    fd_state_strip_writers(void *buf);                   /* DAY77b：fork 的子进程不继承写打开的文件 */
 
 /* DAY77: 进程切换时保存/恢复整张 fd 表（每个进程一张）。buf 至少 fd_state_size() 字节；fd_fork_state 不碰当前表。 */
 #define LUMA_FD_STATE_MAX 16384

@@ -47,6 +47,7 @@ int vfs_ops_statfs(const char *path, vfs_statfs_t *out);            /* 0 / -errn
 int vfs_ops_open_node(const char *path, vfs_node_t *node);
 
 /* DAY75: 同上，但要求是目录（成功后 node 可以交给 node->fs->readdir）。不存在 -ENOENT，是文件 -ENOTDIR。 */
+int vfs_ops_writable(const char *path);                              /* DAY77b: 0 / -EROFS（光盘）/ 路径错误；不检查文件是否存在 */
 int vfs_ops_open_dir(const char *path, vfs_node_t *node);
 
 /* 把 "IDE3/docs/a" 拆成卷 + 卷内路径；找不到卷 -> -LUMA_ENODEV */

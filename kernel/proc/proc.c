@@ -143,6 +143,7 @@ int proc_fork(void)
     }
     fd_state_save(me->fds);                          /* 先把父进程当前的表存回它的槽，再整份复制给子进程 */
     memcpy(p->fds, me->fds, LUMA_FD_STATE_MAX);
+    fd_state_strip_writers(p->fds);                  /* DAY77b：写缓冲不跨进程共享 */
 
     /* 子进程内核栈：栈顶放中断帧拷贝（isr_context_t + CPU 在特权级切换时压的 useresp/ss 共 7 个 dword 之后还有 2 个），
      * 下面放 proc_switch 的假帧：4 个寄存器 + 返回地址 proc_child_start。 */
