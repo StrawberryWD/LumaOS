@@ -185,6 +185,7 @@ int lmfs_vfs_open_path(const char *path, vfs_node_t *out_node);
  * 成功返回 0，失败返回 -1。
  */
 int lmfs_vfs_delete(const char *path);
+int lmfs_vfs_rmdir(const char *path);   /* DAY77c: 0 / -1 / -2 非空 / -3 不是目录 */
 
 /* ===================================================================
  * DAY42 (第二月 · 第6周 · Day 42 of the 5.0 filesystem roadmap):

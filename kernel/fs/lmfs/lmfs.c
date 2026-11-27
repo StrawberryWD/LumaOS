@@ -55,6 +55,7 @@
  * it. See free_inode_data()'s own definition for the full doc
  * comment. */
 static int free_inode_data(lmfs_fs_t *fs, const lmfs_inode_t *inode);
+static uint32_t g_bm_gen;   /* DAY77c: 位图世代号，见 bm_sync() */
 
 /* compute_data_bitmap_sectors(sb)
  *
@@ -188,6 +189,7 @@ int lmfs_mount(block_device_t *dev, uint32_t lba, lmfs_fs_t *out_fs)
     out_fs->bm_cache[1].idx = -1;
     out_fs->blk_hint = 0;
     out_fs->ino_hint = 0;
+    out_fs->bm_gen = g_bm_gen;                    /* DAY77c */
     if (lmfs_count_free(out_fs) != 0) {
         memset(out_fs, 0, sizeof(lmfs_fs_t));
         return -1;
@@ -344,6 +346,20 @@ static uint32_t bm_sector_count(const lmfs_fs_t *fs, int which)
  * use_cache == 0 时无论如何都重新读盘（老算法/对照组）。读进来的内容总是写进缓存缓冲区，
  * 并记下 idx——因为缓存是写透的（见 bm_store），缓存缓冲区里的内容永远 == 磁盘内容，
  * 所以“老算法也顺便刷新缓存”是安全的。 */
+int lmfs_count_free(lmfs_fs_t *fs);
+
+static void bm_sync(lmfs_fs_t *fs)
+{
+    if (fs->bm_gen == g_bm_gen)
+        return;
+    fs->bm_gen = g_bm_gen;                        /* 先登记：lmfs_count_free 只读盘，不会递归回来 */
+    fs->bm_cache[0].idx = -1;
+    fs->bm_cache[1].idx = -1;
+    fs->blk_hint = 0;
+    fs->ino_hint = 0;
+    (void)lmfs_count_free(fs);
+}
+
 static uint8_t *bm_load(lmfs_fs_t *fs, int which, uint32_t idx, int use_cache)
 {
     if (use_cache && fs->bm_cache[which].idx == (int32_t)idx) {
@@ -370,6 +386,7 @@ static int bm_store(lmfs_fs_t *fs, int which, uint32_t idx)
         return -1;
     }
     g_lmfs_stats.bm_sector_writes++;
+    fs->bm_gen = ++g_bm_gen;                      /* 我的缓存是最新的，别的挂载的缓存从此过期 */
     return 0;
 }
 
@@ -426,6 +443,7 @@ int lmfs_count_free(lmfs_fs_t *fs)
  * （老模式由调用者更新，见 lmfs_alloc_block）。 */
 static int bm_alloc(lmfs_fs_t *fs, int which, uint32_t *out, uint32_t *hint, uint32_t *free_cnt, int fast)
 {
+    bm_sync(fs);
     uint32_t nbits = bm_bit_count(fs, which);
     uint32_t nsec  = bm_sector_count(fs, which);
 
@@ -484,6 +502,7 @@ exhausted:
 /* 清除位图里第 num 位。返回 0 成功（含“本来就空闲”——只计数，不算错），-1 读写失败。 */
 static int bm_release(lmfs_fs_t *fs, int which, uint32_t num, uint32_t *hint, uint32_t *free_cnt)
 {
+    bm_sync(fs);
     uint32_t s = num / (LMFS_SECTOR_SIZE * 8u);
     uint32_t byte = (num / 8u) % LMFS_SECTOR_SIZE;
     uint8_t  mask = (uint8_t)(1u << (num % 8u));
@@ -1226,7 +1245,7 @@ static int free_inode_data(lmfs_fs_t *fs, const lmfs_inode_t *inode)
     return 0;
 }
 
-int lmfs_delete(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name)
+static int delete_impl(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name, int want_dir)
 {
     if (!fs || !fs->dev || !name)
         return -1;
@@ -1280,9 +1299,33 @@ int lmfs_delete(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name)
     lmfs_inode_t target;
     if (lmfs_read_inode(fs, found_inode_num, &target) != 0)
         return -1;
-    if (target.type != LMFS_TYPE_FILE)
-        return -1;   /* 目录（比如根目录自己的 "."/".."）不允许删除，
-                        见 lmfs_delete() 声明上方注释 */
+    if (!want_dir) {
+        if (target.type != LMFS_TYPE_FILE)
+            return -1;   /* 目录（比如根目录自己的 "."/".."）不允许删除，
+                            见 lmfs_delete() 声明上方注释 */
+    } else {
+        /* DAY77c: rmdir —— 只删空目录。"." / ".." 这两个保留名本身不能当目标；
+         * 目录里除了 "." ".." 还有任何 used 项就拒绝（返回 -2 = 非空，调用者翻成 ENOTEMPTY）。 */
+        if (target.type != LMFS_TYPE_DIR)
+            return -3;                                   /* 不是目录 */
+        if ((name_len == 1 && name[0] == '.') || (name_len == 2 && name[0] == '.' && name[1] == '.'))
+            return -1;
+        static uint8_t dblk[LMFS_BLOCK_SIZE];
+        for (int bi = 0; bi < 8; bi++) {
+            if (target.direct[bi] == LMFS_BLOCK_NONE) break;
+            uint32_t lba = fs->mount_lba + fs->data_area_lba + target.direct[bi] * LMFS_SECTORS_PER_BLOCK;
+            if (fs->dev->read(fs->dev, lba, LMFS_SECTORS_PER_BLOCK, dblk) != 0)
+                return -1;
+            for (uint32_t sl = 0; sl < LMFS_DIRENTS_PER_BLOCK; sl++) {
+                lmfs_dirent_t de2;
+                memcpy(&de2, dblk + sl * LMFS_DIRENT_SIZE, sizeof(de2));
+                if (!de2.used) continue;
+                int dot = (de2.name_len == 1 && de2.name[0] == '.');
+                int dotdot = (de2.name_len == 2 && de2.name[0] == '.' && de2.name[1] == '.');
+                if (!dot && !dotdot) return -2;
+            }
+        }
+    }
 
     /* ---- 第 1 步：先清目录项，`rm` 的用户可见效果立刻生效 ----
      * 顺序的完整论证见 lmfs_delete() 声明上方注释。 */
@@ -1315,6 +1358,16 @@ int lmfs_delete(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name)
         return -1;
 
     return 0;
+}
+int lmfs_delete(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name)
+{
+    return delete_impl(fs, parent_inode_num, name, 0);
+}
+
+/* DAY77c: 删空目录。返回 0；-1 一般错误；-2 目录非空；-3 不是目录 */
+int lmfs_rmdir(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name)
+{
+    return delete_impl(fs, parent_inode_num, name, 1);
 }
 /* ===================================================================
  * DAY67: lmfs_dir_entry_at() —— 按序号取目录项（不再有“最多 32 项”的限制）

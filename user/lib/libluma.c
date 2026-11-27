@@ -48,6 +48,7 @@ ssize_t write(int fd, const void *buf, size_t len)
 }
 
 int unlink(const char *path)                      { return ret_errno(luma_syscall3(SYS_UNLINK, (int)path, 0, 0)); }
+int rmdir(const char *path)                       { return ret_errno(luma_syscall3(SYS_RMDIR, (int)path, 0, 0)); }
 int mkdir(const char *path)                       { return ret_errno(luma_syscall3(SYS_MKDIR, (int)path, 0, 0)); }
 int rename(const char *o, const char *n)          { return ret_errno(luma_syscall3(SYS_RENAME, (int)o, (int)n, 0)); }
 int fsync(int fd)                                 { return ret_errno(luma_syscall3(SYS_FSYNC, fd, 0, 0)); }

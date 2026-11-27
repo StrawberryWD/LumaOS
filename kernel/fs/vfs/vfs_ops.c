@@ -305,6 +305,25 @@ int vfs_ops_delete(const char *path)
     return -LUMA_ENOSYS;
 }
 
+int vfs_ops_rmdir(const char *path)
+{
+    filesystem_t *fs; const char *sub;
+    int r = vfs_ops_split(path, &fs, &sub);
+    if (r < 0) return r;
+    if (is_iso(fs)) return -LUMA_EROFS;
+    if (!is_lmfs(fs)) return -LUMA_ENOSYS;
+    vfs_node_t node;
+    r = open_node(fs, path, sub, &node);
+    if (r < 0) return r;
+    if (node.type != VFS_TYPE_DIR) return -LUMA_ENOTDIR;
+    if (sub[0] == '\0') return -LUMA_EBUSY;                   /* 卷根 */
+    r = lmfs_vfs_rmdir(path);
+    if (r == 0) return 0;
+    if (r == -2) return -LUMA_ENOTEMPTY;
+    if (r == -3) return -LUMA_ENOTDIR;
+    return -LUMA_EIO;
+}
+
 int vfs_ops_dir_count(const char *path, uint32_t *count)
 {
     filesystem_t *fs; const char *sub;

@@ -30,7 +30,7 @@ from qemu_dump_console import parse_monitor_hexdump, render  # noqa: E402
 KEYMAP = {c: c for c in "abcdefghijklmnopqrstuvwxyz0123456789"}
 KEYMAP.update({".": "dot", "/": "slash", " ": "spc", "_": "shift-minus",
                "-": "minus", "=": "equal", '"': "shift-apostrophe", ",": "comma", "\\": "backslash",
-               ";": "semicolon", "'": "apostrophe"})
+               ";": "semicolon", "'": "apostrophe", ">": "shift-dot"})
 
 # terminal_t layout (kernel/gui/gui.h): lines[400] of
 #   { char text[120]; unsigned char color[120]; int len; }  -> 244 bytes

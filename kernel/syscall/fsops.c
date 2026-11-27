@@ -128,6 +128,14 @@ int32_t fsops_mkdir(const char *upath)
     return vfs_ops_mkdir(full);
 }
 
+int32_t fsops_rmdir(const char *upath)
+{
+    char full[LUMA_PATH_MAX];
+    int r = resolve(upath, full, sizeof(full));
+    if (r < 0) return r;
+    return vfs_ops_rmdir(full);
+}
+
 #define XFER_MAX (256u * 1024u)
 static uint8_t g_xfer[XFER_MAX];                               /* rename 的中转缓冲（.bss） */
 

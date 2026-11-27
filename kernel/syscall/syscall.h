@@ -274,6 +274,8 @@
 #define SYS_MKDIR    21
 #define SYS_RENAME   22
 #define SYS_FSYNC    23
+/* DAY77c: 24 SYS_RMDIR int rmdir(const char *path)   ebx=path。只删空目录：非空 -ENOTEMPTY，不是目录 -ENOTDIR，卷根 -EBUSY，光盘 -EROFS，FAT -ENOSYS */
+#define SYS_RMDIR    24
 
 #define LUMA_DT_FILE 1
 #define LUMA_DT_DIR  2

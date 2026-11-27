@@ -61,6 +61,7 @@ typedef __builtin_va_list va_list;
 #define SYS_MKDIR    21
 #define SYS_RENAME   22
 #define SYS_FSYNC    23
+#define SYS_RMDIR    24
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -213,6 +214,7 @@ ssize_t read(int fd, void *buf, size_t len);
 int     close(int fd);
 int     unlink(const char *path);
 int     mkdir(const char *path);
+int     rmdir(const char *path);     /* DAY77c: 只删空目录；非空 ENOTEMPTY */
 int     rename(const char *oldpath, const char *newpath);
 int     fsync(int fd);
 int     lseek(int fd, int off, int whence);
@@ -287,6 +289,20 @@ char *strrchr(const char *s, int c);
 char *strcat(char *dst, const char *src);
 int   strcasecmp(const char *a, const char *b);
 char *strstr(const char *hay, const char *needle);
+
+/* DAY77c: 目录树工具（user/lib/fsutil.c），cp / mv / rm 共用。prog 只用于错误前缀；返回出错条目数（0 = 成功），原因已写到 stderr。
+ *   fs_copy(prog, src, dst, rec)       dst 是已有目录 -> 复制到 dst/basename(src)，否则 dst 就是目标名；目录要 rec=1
+ *   fs_copy_tree(prog, src, dst, rec)  dst 就是目标本身（mv 的目录改名用它）
+ *   fs_remove(prog, path, rec, force)  删文件；rec=1 递归删目录；force=1 路径不存在不算错；拒绝 . .. 和卷根
+ *   fs_basename / fs_trim / fs_join / fs_is_dir / fs_is_volume_root  路径小工具 */
+const char *fs_basename(const char *p);
+void fs_trim(char *dst, const char *src, size_t cap);
+int  fs_join(char *out, size_t cap, const char *dir, const char *name);
+int  fs_is_dir(const char *path);
+int  fs_is_volume_root(const char *path);
+int  fs_copy(const char *prog, const char *src, const char *dst, int recursive);
+int  fs_copy_tree(const char *prog, const char *src, const char *dst, int recursive);
+int  fs_remove(const char *prog, const char *path, int recursive, int force);
 
 void    exit(int code) __attribute__((noreturn));      /* SYS_EXIT，永不返回 */
 

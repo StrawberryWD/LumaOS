@@ -238,6 +238,12 @@ typedef struct {
         int32_t  idx;            /* 缓存的是位图的第几个扇区；-1 = 空 */
         uint8_t  buf[512];
     } bm_cache[2];               /* [0] = 数据块位图  [1] = inode 位图 */
+    /* DAY77c: 多个挂载实例之间的缓存一致性。启动自测（Day 38~42）各自 lmfs_mount() 同一个卷，VFS 用的那个挂载
+     * 缓存着位图扇区和空闲计数；别的挂载分配了块之后，这份缓存就过期了——再用它分配会把整张扇区写回旧内容，
+     * 把别人刚置位的块“释放”掉（症状：mkdir/touch 之后重启，目录的第三个块被后来的文件覆盖，文件消失；fsck 报泄漏）。
+     * 全局世代号 g_bm_gen：任何挂载每写一次位图扇区就 +1，并记在自己的 bm_gen 里；分配/释放前发现
+     * bm_gen != g_bm_gen，说明别人改过，丢掉缓存、hint 归零、重新数空闲。 */
+    uint32_t bm_gen;
 } lmfs_fs_t;
 
 /* DAY66: 分配器的统计，给 `lmfsbench` 和测试用。全局一份（所有 LMFS 卷共用）。 */
@@ -800,6 +806,9 @@ int lmfs_free_inode(lmfs_fs_t *fs, uint32_t inode_num);
  * 返回 -1。
  */
 int lmfs_delete(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name);
+
+/* DAY77c: 删空目录。0 成功；-1 错误；-2 非空；-3 不是目录。 */
+int lmfs_rmdir(lmfs_fs_t *fs, uint32_t parent_inode_num, const char *name);
 /* ===================================================================
  * DAY42 (第二月 · 第6周 · Day 42 of the 5.0 filesystem roadmap):
  *   "多级目录与路径解析。" 验收："可以创建并访问多级目录。"

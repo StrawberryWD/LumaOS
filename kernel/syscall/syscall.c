@@ -248,6 +248,8 @@ static int32_t sys_unlink(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uin
 { (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_unlink((const char *)(uintptr_t)p); }
 static int32_t sys_mkdir(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_mkdir((const char *)(uintptr_t)p); }
+static int32_t sys_rmdir(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_rmdir((const char *)(uintptr_t)p); }
 static int32_t sys_rename(uint32_t o, uint32_t n, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a3; (void)a4; (void)a5; (void)a6; return fsops_rename((const char *)(uintptr_t)o, (const char *)(uintptr_t)n); }
 static int32_t sys_fsync(uint32_t fd, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
@@ -279,6 +281,7 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_MKDIR]  = sys_mkdir,
     [SYS_RENAME] = sys_rename,
     [SYS_FSYNC]  = sys_fsync,
+    [SYS_RMDIR]  = sys_rmdir,       /* DAY77c */
 };
 
 static syscall_stats_t g_stats;

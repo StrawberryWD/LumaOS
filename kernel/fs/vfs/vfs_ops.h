@@ -38,6 +38,7 @@ int vfs_ops_mkdir(const char *path);                                /* 0 / -errn
 int vfs_ops_write(const char *path, const void *buf, uint32_t n);   /* 整个文件覆盖写；文件必须已存在；返回 n / -errno */
 int vfs_ops_read(const char *path, void *buf, uint32_t cap);        /* 读整个文件；文件比 cap 大 -> -ERANGE；返回字节数 / -errno */
 int vfs_ops_delete(const char *path);                               /* 0 / -errno（目录 -> -EISDIR） */
+int vfs_ops_rmdir(const char *path);                                 /* DAY77c: 0 / -errno（非空 -ENOTEMPTY，不是目录 -ENOTDIR，FAT -ENOSYS，ISO -EROFS） */
 int vfs_ops_stat(const char *path, uint32_t *size, int *is_dir);    /* 0 / -errno */
 int vfs_ops_dir_count(const char *path, uint32_t *count);           /* 目录项数（不含 . ..） */
 int vfs_ops_statfs(const char *path, vfs_statfs_t *out);            /* 0 / -errno；path 只用来选卷（"IDE3" 即可） */

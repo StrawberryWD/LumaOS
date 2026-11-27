@@ -377,3 +377,18 @@ int lmfs_vfs_delete(const char *path)
 
     return lmfs_delete(lfs, parent, name);
 }
+
+int lmfs_vfs_rmdir(const char *path)
+{
+    const char *rest;
+    filesystem_t *fs = split_lmfs_mount(path, &rest);
+    if (!fs)
+        return -1;
+    lmfs_fs_t *lfs = (lmfs_fs_t *)fs->fs_private;
+
+    uint32_t parent;
+    char name[LMFS_NAME_MAX + 1];
+    if (lmfs_resolve_parent(lfs, LMFS_ROOT_INODE_NUM, rest, &parent, name) != 0)
+        return -1;
+    return lmfs_rmdir(lfs, parent, name);
+}
