@@ -62,6 +62,10 @@ typedef __builtin_va_list va_list;
 #define SYS_RENAME   22
 #define SYS_FSYNC    23
 #define SYS_RMDIR    24
+#define SYS_GETENV   25
+#define SYS_SETENV   26
+#define SYS_UNSETENV 27
+#define SYS_ENVAT    28
 
 /* ---- 标准文件描述符 ---- */
 #define STDIN_FILENO   0
@@ -214,6 +218,13 @@ ssize_t read(int fd, void *buf, size_t len);
 int     close(int fd);
 int     unlink(const char *path);
 int     mkdir(const char *path);
+/* DAY77c: 环境变量（全系统共享一份，设计见 kernel/env/env.h）。getenv 返回指向静态缓冲区的指针（下次调用前有效），没有返回 NULL。
+ *   setenv: 0 / -1 + errno（EINVAL 名字非法，E2BIG 值太长，ENOSPC 表满）；overwrite=0 且已存在时什么也不做
+ *   envat(i, buf, size): 第 i 个变量写成 "NAME=VALUE"，返回长度；i 越界返回 -1（errno = ENOENT），用来遍历 */
+char   *getenv(const char *name);
+int     setenv(const char *name, const char *value, int overwrite);
+int     unsetenv(const char *name);
+int     envat(unsigned i, char *buf, size_t size);
 int     rmdir(const char *path);     /* DAY77c: 只删空目录；非空 ENOTEMPTY */
 int     rename(const char *oldpath, const char *newpath);
 int     fsync(int fd);

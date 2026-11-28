@@ -276,6 +276,15 @@
 #define SYS_FSYNC    23
 /* DAY77c: 24 SYS_RMDIR int rmdir(const char *path)   ebx=path。只删空目录：非空 -ENOTEMPTY，不是目录 -ENOTDIR，卷根 -EBUSY，光盘 -EROFS，FAT -ENOSYS */
 #define SYS_RMDIR    24
+/* DAY77c: 环境变量（设计见 kernel/env/env.h；全系统共享一份，程序改了 shell 立刻看到）
+ *  25 SYS_GETENV   int getenv(const char *name, char *buf, size_t size)   ebx=name ecx=buf edx=size；返回值的长度；没有 -ENOENT；buf 小 -ERANGE
+ *  26 SYS_SETENV   int setenv(const char *name, const char *value)        名字非法 -EINVAL，值太长 -E2BIG，表满 -ENOSPC
+ *  27 SYS_UNSETENV int unsetenv(const char *name)                         不存在也返回 0
+ *  28 SYS_ENVAT    int envat(unsigned i, char *buf, size_t size)          把第 i 个变量以 "NAME=VALUE" 写进 buf，返回长度；i 越界 -ENOENT */
+#define SYS_GETENV   25
+#define SYS_SETENV   26
+#define SYS_UNSETENV 27
+#define SYS_ENVAT    28
 
 #define LUMA_DT_FILE 1
 #define LUMA_DT_DIR  2

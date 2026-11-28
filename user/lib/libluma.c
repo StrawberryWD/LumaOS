@@ -48,6 +48,18 @@ ssize_t write(int fd, const void *buf, size_t len)
 }
 
 int unlink(const char *path)                      { return ret_errno(luma_syscall3(SYS_UNLINK, (int)path, 0, 0)); }
+char *getenv(const char *name)
+{
+    static char buf[128];
+    return ret_errno(luma_syscall3(SYS_GETENV, (int)name, (int)buf, (int)sizeof buf)) < 0 ? 0 : buf;
+}
+int setenv(const char *name, const char *value, int overwrite)
+{
+    if (!overwrite && getenv(name)) return 0;
+    return ret_errno(luma_syscall3(SYS_SETENV, (int)name, (int)value, 0));
+}
+int unsetenv(const char *name)                    { return ret_errno(luma_syscall3(SYS_UNSETENV, (int)name, 0, 0)); }
+int envat(unsigned i, char *buf, size_t size)     { return ret_errno(luma_syscall3(SYS_ENVAT, (int)i, (int)buf, (int)size)); }
 int rmdir(const char *path)                       { return ret_errno(luma_syscall3(SYS_RMDIR, (int)path, 0, 0)); }
 int mkdir(const char *path)                       { return ret_errno(luma_syscall3(SYS_MKDIR, (int)path, 0, 0)); }
 int rename(const char *o, const char *n)          { return ret_errno(luma_syscall3(SYS_RENAME, (int)o, (int)n, 0)); }

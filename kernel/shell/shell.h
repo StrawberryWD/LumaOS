@@ -128,23 +128,16 @@ int shell_split_path(const char *resolved, struct filesystem **out_fs,
 
 void cmd_help    (terminal_t *t, int argc, char **argv);
 void cmd_clear   (terminal_t *t, int argc, char **argv);
-void cmd_type    (terminal_t *t, int argc, char **argv);
 void cmd_version (terminal_t *t, int argc, char **argv);
-void cmd_echo    (terminal_t *t, int argc, char **argv);
 void cmd_color   (terminal_t *t, int argc, char **argv);
 void cmd_shutdown(terminal_t *t, int argc, char **argv);
 void cmd_reboot  (terminal_t *t, int argc, char **argv);
-void cmd_ls      (terminal_t *t, int argc, char **argv);  /* DAY14 */
 /* cmd_show — DAY19, renamed from cmd_cat on DAY21, removed on DAY27
  * ("删除那个show只保留read" — remove `show`, keep only `read`; DAY21's
  * own read.c already grew into a full superset of what `show` did, so
  * this project no longer needs two commands for the same job). */
-void cmd_create  (terminal_t *t, int argc, char **argv);  /* DAY24 */
 void cmd_write   (terminal_t *t, int argc, char **argv);  /* DAY25 */
-void cmd_read    (terminal_t *t, int argc, char **argv);  /* DAY25 */
 void cmd_cd      (terminal_t *t, int argc, char **argv);  /* DAY25 */
-void cmd_rm      (terminal_t *t, int argc, char **argv);  /* DAY26 */
-void cmd_mkdir   (terminal_t *t, int argc, char **argv);  /* DAY42 */
 void cmd_term    (terminal_t *t, int argc, char **argv);  /* DAY43 PRE-3 */
 void cmd_elfinfo (terminal_t *t, int argc, char **argv);  /* DAY43 */
 void cmd_elfload (terminal_t *t, int argc, char **argv);  /* DAY44 */

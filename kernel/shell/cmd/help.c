@@ -23,5 +23,6 @@ void cmd_help(terminal_t *t, int argc, char **argv) {
         terminal_puts(t, cmd_table[i].description, TERM_COL_DEFAULT);
         terminal_newline(t);
     }
-    terminal_puts(t, "\nUP/DOWN = history  LEFT/RIGHT = cursor\n", TERM_COL_INFO);
+    terminal_puts(t, "\nAny other command runs NAME.sw found via PATH (ls cat cp rename rm mkdir create set ...).\n", TERM_COL_INFO);
+    terminal_puts(t, "Variables: set NAME=VALUE, use $NAME in a command line. UP/DOWN = history\n", TERM_COL_INFO);
 }

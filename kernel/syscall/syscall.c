@@ -12,6 +12,7 @@
 #include "../mm/aspace.h"
 #include "fd.h"
 #include "fsops.h"
+#include "envcall.h"
 #include "stdin.h"
 #include "../exec/elf_exec.h"
 #include "../proc/proc.h"
@@ -250,6 +251,14 @@ static int32_t sys_mkdir(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uint
 { (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_mkdir((const char *)(uintptr_t)p); }
 static int32_t sys_rmdir(uint32_t p, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return fsops_rmdir((const char *)(uintptr_t)p); }
+static int32_t sys_getenv(uint32_t n, uint32_t b, uint32_t s, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a4; (void)a5; (void)a6; return envcall_get(n, b, s); }
+static int32_t sys_setenv(uint32_t n, uint32_t v, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a3; (void)a4; (void)a5; (void)a6; return envcall_set(n, v); }
+static int32_t sys_unsetenv(uint32_t n, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a2; (void)a3; (void)a4; (void)a5; (void)a6; return envcall_unset(n); }
+static int32_t sys_envat(uint32_t i, uint32_t b, uint32_t s, uint32_t a4, uint32_t a5, uint32_t a6)
+{ (void)a4; (void)a5; (void)a6; return envcall_at(i, b, s); }
 static int32_t sys_rename(uint32_t o, uint32_t n, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
 { (void)a3; (void)a4; (void)a5; (void)a6; return fsops_rename((const char *)(uintptr_t)o, (const char *)(uintptr_t)n); }
 static int32_t sys_fsync(uint32_t fd, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6)
@@ -282,6 +291,10 @@ static const syscall_fn_t syscall_table[LUMA_SYSCALL_MAX] = {
     [SYS_RENAME] = sys_rename,
     [SYS_FSYNC]  = sys_fsync,
     [SYS_RMDIR]  = sys_rmdir,       /* DAY77c */
+    [SYS_GETENV] = sys_getenv,
+    [SYS_SETENV] = sys_setenv,
+    [SYS_UNSETENV] = sys_unsetenv,
+    [SYS_ENVAT]  = sys_envat,
 };
 
 static syscall_stats_t g_stats;

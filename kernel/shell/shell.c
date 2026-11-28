@@ -4,6 +4,7 @@
 #include "../fs/vfs/vfs.h"   /* DAY25: vfs_root, vfs_mount_name_of() —
                                 shell_resolve_path() below */
 #include "shell.h"
+#include "../env/env.h"      /* DAY77c: PATH、$VAR */
 #include "../fs/vfs/vfs_ops.h"
 
 shell_cmd_t cmd_table[SHELL_MAX_CMDS];
@@ -19,11 +20,10 @@ void shell_register(const char *name, const char *desc, shell_cmd_fn_t fn) {
 
 void shell_init(void) {
     cmd_count = 0;
+    env_init();                       /* DAY77c: 环境变量表，默认 PATH=.:RAM0:IDE3 */
     shell_register("help",     "Show available commands",     cmd_help    );
     shell_register("clear",    "Clear terminal screen",       cmd_clear   );
     shell_register("version",  "Show OS version",             cmd_version );
-    shell_register("type",     "Show quick reference",        cmd_type    );
-    shell_register("echo",     "Echo text to terminal",       cmd_echo    );
     shell_register("color",    "Change text color (0-15)",    cmd_color   );
     shell_register("shutdown", "Shutdown the system",         cmd_shutdown);
     shell_register("reboot",   "Reboot the system",           cmd_reboot  );
@@ -31,7 +31,6 @@ void shell_init(void) {
      * See kernel/shell/cmd/ls.c's header comment for what vfs_root
      * actually resolves to and why this goes through fs->readdir()
      * instead of calling any FAT12-specific function by name. */
-    shell_register("ls",       "List files (via VFS)",        cmd_ls      );
     /* DAY19: "实现 cmd_cat /KERNEL.BIN，能在终端打印出内核二进制的开头
      * 部分。" this goes through fat_open()+fs->read() (fat_read(), also
      * new this day), never a FAT12/16/32-specific function by name,
@@ -52,7 +51,6 @@ void shell_init(void) {
      * since Day 18-FOLLOWUP/Day 25) and the small bare-filename
      * fallback this command adds on top of fat_create_file()'s own
      * stricter syntax. */
-    shell_register("create",   "Create an empty file (via VFS)",    cmd_create);
     /* DAY25: "实现 fat_write(file, buf, size)... write test.txt... 支持
      * cd 命令... 支持 show test.txt 而不是 show IDE2/text.txt." See each
      * command's own .c file header comment for the full contract:
@@ -65,7 +63,6 @@ void shell_init(void) {
      * file's own header comment for why "cd between mounts" is exactly
      * what "当前工作目录" can mean at this point in the roadmap). */
     shell_register("write",    "Write a file's contents (via VFS)", cmd_write );
-    shell_register("read",     "Print a file's contents (via VFS)", cmd_read  );
     shell_register("cd",       "Change directory (cd <path>, cd .., cd -, cd)", cmd_cd    );
     shell_register("pwd",      "Print the current directory",       cmd_pwd   );   /* DAY69 */
     /* DAY26: "实现 fat_delete_file(name)：找到目录项，标记为已删除
@@ -76,13 +73,11 @@ void shell_init(void) {
      * kernel/fs/fat/fat_vfs.h's doc comment on fat_delete_file() for
      * the real cluster-chain-freeing + directory-entry-deletion work
      * this command exercises. */
-    shell_register("rm",       "Delete a file (via VFS)",           cmd_rm    );
     /* DAY42: "多级目录与路径解析。可以创建并访问多级目录。" `mkdir` is
      * this day's only new command — `cd`/`ls`/`create`/`read`/`rm` all
      * gain multi-level path support by way of shell_resolve_path()
      * below (and cd.c/ls.c's own DAY42 changes), not by being
      * re-registered. See kernel/shell/cmd/mkdir.c's header comment. */
-    shell_register("mkdir",    "Create a directory (LMFS only)",    cmd_mkdir );
     /* DAY43 PRE-3: open an extra Terminal window (GUI only). */
     shell_register("term",     "Open a new Terminal window (GUI)",  cmd_term  );
     /* DAY43: "学习并定义 ELF32 基础结构。能解析 ELF Header。" `elfinfo`
@@ -180,29 +175,54 @@ static int run_external(terminal_t *t, const char *name, int argc, const char *a
     strcpy(prog, name);
     if (!(n >= 4 && prog[n-3] == '.' && (prog[n-2] == 's' || prog[n-2] == 'S') && (prog[n-1] == 'w' || prog[n-1] == 'W')))
         strcpy(prog + n, ".sw");
-    const char *cands[2] = { prog, 0 };
-    static char sys_cand[64];
-    if (!strchr(prog, '/')) {                       /* 裸名字：再试系统卷 */
-        strcpy(sys_cand, "RAM0/");
-        if (strlen(prog) + 6 <= sizeof(sys_cand)) { strcpy(sys_cand + 5, prog); cands[1] = sys_cand; }
-    }
-    for (int i = 0; i < 2; i++) {
-        if (!cands[i]) continue;
+    /* DAY77c: 搜索路径 = 环境变量 PATH（"目录:目录:…"，"." 是当前目录）。名字里带 '/' 的只按原样找。 */
+    static char cand[96];
+    const char *path = strchr(prog, '/') ? 0 : env_lookup("PATH");
+    const char *pp = path;
+    for (int tries = 0; tries < 16; tries++) {
+        if (path) {
+            if (!*pp) break;
+            const char *e = pp; while (*e && *e != ':') e++;
+            size_t dl = (size_t)(e - pp);
+            if (dl == 0 || (dl == 1 && pp[0] == '.')) {
+                strcpy(cand, prog);
+            } else {
+                if (dl + 1 + strlen(prog) + 1 > sizeof(cand)) { pp = *e ? e + 1 : e; continue; }
+                memcpy(cand, pp, dl);
+                size_t k = dl;
+                if (cand[k - 1] != '/') cand[k++] = '/';
+                strcpy(cand + k, prog);
+            }
+            pp = *e ? e + 1 : e;
+        } else {
+            if (tries) break;
+            strcpy(cand, prog);
+        }
         uint32_t size; int is_dir = 0;
-        if (shell_resolve_path(cands[i], resolved, sizeof(resolved)) != 0) continue;
+        if (shell_resolve_path(cand, resolved, sizeof(resolved)) != 0) continue;
         if (vfs_ops_stat(resolved, &size, &is_dir) != 0 || is_dir) continue;
-        if (strlen(cands[i]) + 1 + strlen(args) + 1 > sizeof(line)) return 0;
-        strcpy(line, cands[i]);
+        if (strlen(cand) + 1 + strlen(args) + 1 > sizeof(line)) return 0;
+        strcpy(line, cand);
         if (args[0]) { size_t l = strlen(line); line[l] = ' '; strcpy(line + l + 1, args); }
         g_cur_args = line;
-        char *fake[2] = { (char *)"run", (char *)cands[i] };
+        char *fake[2] = { (char *)"run", cand };
         cmd_run(t, 2, fake);          /* cmd_run 只检查 argc >= 2，程序和参数从 g_cur_args 重新切词 */
         return 1;
     }
     return 0;
 }
 
-void shell_exec(terminal_t *t, const char *cmdline) {
+void shell_exec(terminal_t *t, const char *cmdline_in) {
+    /* DAY77c: 先把 $NAME / ${NAME} 换成环境变量的值（见 kernel/env/env.h）。静态缓冲区：g_cur_args 会指进去。 */
+    static char expanded[512];
+    const char *cmdline = cmdline_in;
+    if (strchr(cmdline_in, '$')) {
+        if (env_expand(cmdline_in, expanded, sizeof expanded) != 0) {
+            terminal_puts(t, "Command line too long after $VAR expansion\n", TERM_COL_ERROR);
+            return;
+        }
+        cmdline = expanded;
+    }
     int blank = 1;
     for (int i = 0; cmdline[i]; i++)
         if (cmdline[i]!=' '&&cmdline[i]!='\t') { blank=0; break; }
@@ -223,7 +243,7 @@ void shell_exec(terminal_t *t, const char *cmdline) {
             return;
         }
     }
-    /* DAY75: 不是内置命令——找同名的用户程序（.sw）：先当前目录，再系统卷 RAM0（live CD 带来的 cat.sw ls.sw explorer.sw ...）。
+    /* DAY75: 不是内置命令——找同名的用户程序（.sw）：按环境变量 PATH 找（默认 .:RAM0:IDE3）。
      * 这是“内置命令迁移到用户态”的机制：以后把某个内置命令删掉，同名 .sw 就自动顶上，用户敲的命令不变。 */
     if (run_external(t, argv_p[0], argc, g_cur_args))
         { g_cur_args = ""; return; }
